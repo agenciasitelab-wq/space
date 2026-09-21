@@ -98,6 +98,17 @@ function publicMessage(content: string, components: any[] = [], embeds: any[] = 
   };
 }
 
+function updateMessage(content: string, components: any[] = [], embeds: any[] = []) {
+  return {
+    type: 7,
+    data: {
+      ...(content ? { content } : {}),
+      ...(embeds.length ? { embeds } : {}),
+      ...(components.length ? { components } : {})
+    }
+  };
+}
+
 function purchaseEmbed(
   amount: number,
   username?: string,
@@ -317,7 +328,7 @@ function purchaseButtons(
       type: 1,
       components: [
         button(
-          `space_set_username:${amount}:${encodedUser}`,
+          `space_set_username:${amount}:${encodedUser}:${method ?? "_"}`,
           username ? "ALTERAR ROBLOX" : "USUÁRIO ROBLOX",
           "🎮"
         ),
@@ -502,8 +513,15 @@ export async function POST(req: NextRequest) {
     const parts = customId.split(":");
     const amount = Number(parts[1]);
     const currentUsername = parts[2] && parts[2] !== "_" ? decode(parts[2]) : "";
+    const currentMethod =
+      parts[3] && parts[3] !== "_" ? (parts[3] as DeliveryMethod) : null;
 
-    if (!Number.isInteger(amount) || amount < MIN_ROBUX || amount > MAX_ROBUX) {
+    if (
+      !Number.isInteger(amount) ||
+      amount < MIN_ROBUX ||
+      amount > MAX_ROBUX ||
+      (currentMethod && !VALID_METHODS.includes(currentMethod))
+    ) {
       return interactionResponse(ephemeral("❌ Pedido inválido. Inicie a compra novamente."));
     }
 
@@ -523,27 +541,34 @@ export async function POST(req: NextRequest) {
   if (customId.startsWith("space_username_submit:")) {
     const parts = customId.split(":");
     const amount = Number(parts[1]);
+    const currentMethod =
+      parts[2] && parts[2] !== "_" ? (parts[2] as DeliveryMethod) : null;
     const username = getModalValue(data, "roblox_username");
 
-    if (!Number.isInteger(amount) || amount < MIN_ROBUX || amount > MAX_ROBUX) {
+    if (
+      !Number.isInteger(amount) ||
+      amount < MIN_ROBUX ||
+      amount > MAX_ROBUX ||
+      (currentMethod && !VALID_METHODS.includes(currentMethod))
+    ) {
       return interactionResponse(ephemeral("❌ Pedido inválido. Inicie a compra novamente."));
     }
 
     if (!/^[A-Za-z0-9_]{3,20}$/.test(username)) {
       return interactionResponse(
-        ephemeral(
-          "❌ Username Roblox inválido. Use de 3 a 20 caracteres: letras, números ou _."
+        updateMessage(
+          "❌ **Username Roblox inválido.** Use de 3 a 20 caracteres: letras, números ou _.",
+          purchaseButtons(amount, undefined, currentMethod || undefined),
+          [purchaseEmbed(amount, undefined, currentMethod || undefined)]
         )
       );
     }
 
-    const encodedUser = encode(username);
-
     return interactionResponse(
-      ephemeral(
+      updateMessage(
         "",
-        purchaseButtons(amount, username),
-        [purchaseEmbed(amount, username)]
+        purchaseButtons(amount, username, currentMethod || undefined),
+        [purchaseEmbed(amount, username, currentMethod || undefined)]
       )
     );
   }
@@ -585,8 +610,10 @@ export async function POST(req: NextRequest) {
 
     if (!method) {
       return interactionResponse(
-        ephemeral(
-          "❌ Forma de envio inválida. Use:\n**1** PLUS\n**2** GRUPO\n**3** GAMEPASS + TAXA\n**4** GAMEPASS SEM TAXA"
+        updateMessage(
+          "❌ **Forma de envio inválida.** Use: **1** PLUS • **2** GRUPO • **3** GAMEPASS + TAXA • **4** GAMEPASS SEM TAXA",
+          purchaseButtons(amount, username || undefined),
+          [purchaseEmbed(amount, username || undefined)]
         )
       );
     }
@@ -601,7 +628,7 @@ export async function POST(req: NextRequest) {
     const total = Math.round((amount / 1000) * pricing.rate * 100) / 100;
 
     return interactionResponse(
-      ephemeral(
+      updateMessage(
         "",
         purchaseButtons(amount, username || undefined, method),
         [purchaseEmbed(amount, username || undefined, method, total)]
@@ -716,7 +743,7 @@ export async function POST(req: NextRequest) {
       });
 
       return interactionResponse(
-        ephemeral(
+        updateMessage(
           "",
           [{
             type: 1,
@@ -730,7 +757,7 @@ export async function POST(req: NextRequest) {
           [{
             ...purchaseEmbed(amount, username, method, total, "🟡 ABERTO"),
             title: `🟡 PEDIDO #${order.order_number} ABERTO`,
-            description: "Seu pedido foi criado. O pagamento será realizado no canal privado abaixo."
+            description: "Seu pedido foi criado. Abra o canal privado abaixo para gerar o PIX e acompanhar o pagamento."
           }]
         )
       );
@@ -792,7 +819,11 @@ export async function POST(req: NextRequest) {
 
   if (customId === "space_cancel_order") {
     return interactionResponse(
-      ephemeral("❌ Compra cancelada. Você pode iniciar uma nova compra pelo painel.")
+      updateMessage(
+        "❌ **Compra cancelada.** Você pode iniciar uma nova compra pelo painel.",
+        [],
+        []
+      )
     );
   }
 
