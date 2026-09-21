@@ -356,6 +356,60 @@ function receivedRobux(amount: number, method: DeliveryMethod) {
     : amount;
 }
 
+function deliveryRobuxAmount(amount: number, method: DeliveryMethod) {
+  return method === "gamepass_fee"
+    ? Math.ceil(amount / 0.70)
+    : amount;
+}
+
+async function lookupRobloxUser(username: string) {
+  const response = await fetch("https://users.roblox.com/v1/usernames/users", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      usernames: [username],
+      excludeBannedUsers: false
+    })
+  });
+  if (!response.ok) throw new Error("Roblox não respondeu à consulta.");
+  const data: any = await response.json();
+  const user = data?.data?.[0];
+  if (!user?.id || !user?.name) return null;
+  return { id: String(user.id), name: String(user.name), displayName: String(user.displayName || user.name) };
+}
+
+async function getRobloxAvatar(userId: string) {
+  try {
+    const response = await fetch(
+      "https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=" +
+        encodeURIComponent(userId) +
+        "&size=150x150&format=Png&isCircular=false"
+    );
+    if (!response.ok) return null;
+    const data: any = await response.json();
+    return data?.data?.[0]?.imageUrl || null;
+  } catch {
+    return null;
+  }
+}
+
+async function getStaffRoleIds(guildId: string) {
+  const roles = await discordRequest("/guilds/" + guildId + "/roles", { method: "GET" });
+  const names = new Set([
+    "🎫・SPACE SUPPORT",
+    "🛡️・SPACE STAFF",
+    "💰・SPACE SELLER",
+    "🌌・SPACE DIRECTOR",
+    "👑・SPACE FOUNDER"
+  ]);
+  return (roles as any[]).filter(r => names.has(r.name)).map(r => r.id);
+}
+
+function memberHasAnyRole(interaction: any, roleIds: string[]) {
+  const memberRoles = interaction.member?.roles ?? [];
+  return roleIds.some(id => memberRoles.includes(id));
+}
+
 async function purchaseButtons(
   amount: number,
   username?: string,
@@ -384,9 +438,9 @@ async function purchaseButtons(
         value: deliveryMethod,
         description:
           deliveryMethod === "gamepass_no_fee"
-            ? `Recebe ${received.toLocaleString("pt-BR")} Robux • taxa do Roblox descontada`
+            ? `Recebe ${received.toLocaleString("pt-BR")} Robux • compra de ${amount.toLocaleString("pt-BR")} • taxa descontada`
             : deliveryMethod === "gamepass_fee"
-              ? `Recebe ${received.toLocaleString("pt-BR")} Robux • taxa incluída`
+              ? `Recebe ${received.toLocaleString("pt-BR")} • envia ${deliveryRobuxAmount(amount, deliveryMethod).toLocaleString("pt-BR")} • taxa incluída`
               : `Recebe ${received.toLocaleString("pt-BR")} Robux`,
         emoji: { name: deliveryMethod === "plus" ? "💎" : deliveryMethod === "group" ? "👥" : "🎮" },
         default: method === deliveryMethod
@@ -756,19 +810,40 @@ export async function POST(req: NextRequest) {
     }
 
     const total = Math.round((amount / 1000) * pricing.rate * 100) / 100;
-    const expected =
-      method === "gamepass_no_fee" ? Math.floor(amount * 0.70) : amount;
+    let robloxUser: { id: string; name: string; displayName: string } | null = null;
+    try {
+      robloxUser = await lookupRobloxUser(username);
+    } catch {
+      return interactionResponse(ephemeral("❌ Não consegui consultar o Roblox agora. Tente novamente em alguns segundos."));
+    }
+
+    if (!robloxUser) {
+      return interactionResponse(ephemeral(
+        `❌ A conta Roblox **${username}** não foi encontrada. Confira o username e tente novamente.`
+      ));
+    }
+
+    const expected = receivedRobux(amount, method);
+    const deliveryAmount = deliveryRobuxAmount(amount, method);
+
+    await sb.from("users").update({
+      roblox_username: robloxUser.name,
+      roblox_user_id: robloxUser.id,
+      updated_at: new Date().toISOString()
+    }).eq("id", user.id);
 
     const { data: order, error: orderError } = await sb
       .from("orders")
       .insert({
         user_id: user.id,
         robux_amount: amount,
-        roblox_username: username,
+        roblox_username: robloxUser.name,
+        roblox_user_id: robloxUser.id,
         delivery_method: method,
         price_per_1000: pricing.rate,
         total_price: total,
         expected_received_robux: expected,
+        delivery_robux_amount: deliveryAmount,
         terms_accepted_at: new Date().toISOString(),
         status: "awaiting_payment",
         payment_provider: "asaas"
@@ -790,7 +865,10 @@ export async function POST(req: NextRequest) {
       metadata: {
         discord_id: userId,
         method,
-        robux_amount: amount
+        robux_amount: amount,
+        expected_received_robux: expected,
+        delivery_robux_amount: deliveryAmount,
+        roblox_user_id: robloxUser.id
       }
     });
 
@@ -888,6 +966,138 @@ export async function POST(req: NextRequest) {
     }
 
     return interactionResponse(ephemeral(`❌ Este pedido não pode mais ser cancelado. Status: **${order.status}**`));
+  }
+
+  // Perfil do cliente
+  if (customId === "space_profile") {
+    const sb = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+    const { data: user } = await sb.from("users")
+      .select("id,discord_username,discord_email,roblox_username,verified,created_at")
+      .eq("discord_id", userId).maybeSingle();
+
+    if (!user) return interactionResponse(ephemeral("❌ Você ainda não possui um perfil verificado no SPACE Rewards."));
+
+    const { data: orders } = await sb.from("orders")
+      .select("status,total_price,robux_amount")
+      .eq("user_id", user.id);
+
+    const list = orders ?? [];
+    const completed = list.filter((o: any) => o.status === "delivered");
+    const paid = list.filter((o: any) => ["paid","processing","delivered"].includes(o.status));
+    const spent = paid.reduce((sum: number, o: any) => sum + Number(o.total_price || 0), 0);
+    const robux = completed.reduce((sum: number, o: any) => sum + Number(o.robux_amount || 0), 0);
+
+    return interactionResponse(ephemeral("", [], [{
+      title: "👤 SPACE PROFILE",
+      color: 0x5865f2,
+      fields: [
+        { name: "Discord", value: `**@${user.discord_username || "usuário"}**`, inline: true },
+        { name: "Roblox", value: `**${user.roblox_username || "Não informado"}**`, inline: true },
+        { name: "📦 Pedidos", value: `**${list.length}**`, inline: true },
+        { name: "💰 Total gasto", value: `**${money(spent)}**`, inline: true },
+        { name: "🪙 Robux entregues", value: `**${robux.toLocaleString("pt-BR")}**`, inline: true },
+        { name: "⭐ Status", value: user.verified ? "**Conta verificada**" : "**Não verificada**", inline: true }
+      ],
+      footer: { text: "SPACE Rewards • Perfil do cliente" }
+    }]));
+  }
+
+  // Staff marca manualmente como entregue. A entrega continua 100% manual.
+  if (customId.startsWith("space_mark_delivered:")) {
+    const orderId = customId.slice("space_mark_delivered:".length);
+    const guildId = process.env.DISCORD_GUILD_ID;
+    const staffIds = guildId ? await getStaffRoleIds(guildId) : [];
+    if (!memberHasAnyRole(interaction, staffIds)) {
+      return interactionResponse(ephemeral("❌ Apenas a STAFF pode marcar um pedido como entregue."));
+    }
+
+    const sb = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+    const { data: order } = await sb.from("orders")
+      .select("id,order_number,status,user_id,total_price,robux_amount,discord_channel_id")
+      .eq("id", orderId).single();
+
+    if (!order) return interactionResponse(ephemeral("❌ Pedido não encontrado."));
+    if (!["paid","processing"].includes(order.status)) {
+      return interactionResponse(ephemeral(`❌ Este pedido está **${order.status}** e não pode ser marcado como entregue.`));
+    }
+
+    await sb.from("orders").update({
+      status: "delivered",
+      delivered_at: new Date().toISOString()
+    }).eq("id", order.id);
+
+    await sb.from("order_events").insert({
+      order_id: order.id,
+      event_type: "order_delivered",
+      description: "Entrega marcada manualmente pela STAFF.",
+      metadata: { discord_staff_id: userId }
+    });
+
+    const roles = await discordRequest(`/guilds/${guildId}/roles`, { method: "GET" });
+    const memberRole = (roles as any[]).find((r: any) => r.name === "🚀・SPACE MEMBER");
+    const eliteRole = (roles as any[]).find((r: any) => r.name === "💎・SPACE ELITE");
+    const { data: allDelivered } = await sb.from("orders").select("total_price").eq("user_id", order.user_id).eq("status","delivered");
+    const lifetime = (allDelivered ?? []).reduce((s: number, o: any) => s + Number(o.total_price || 0), 0);
+
+    if (guildId && eliteRole && lifetime >= 500) {
+      try { await discordRequest(`/guilds/${guildId}/members/${(await sb.from("users").select("discord_id").eq("id",order.user_id).single()).data?.discord_id}/roles/${eliteRole.id}`, { method: "PUT", body: JSON.stringify({}) }); } catch {}
+    } else if (guildId && memberRole) {
+      try { await discordRequest(`/guilds/${guildId}/members/${(await sb.from("users").select("discord_id").eq("id",order.user_id).single()).data?.discord_id}/roles/${memberRole.id}`, { method: "PUT", body: JSON.stringify({}) }); } catch {}
+    }
+
+    if (order.discord_channel_id) {
+      try {
+        await discordRequest(`/channels/${order.discord_channel_id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ name: `🟣・pedido-${order.order_number}` })
+        });
+        await discordRequest(`/channels/${order.discord_channel_id}/messages`, {
+          method: "POST",
+          body: JSON.stringify({
+            embeds: [{
+              title: `🟣 PEDIDO ENTREGUE • #${order.order_number}`,
+              description: "A entrega foi marcada pela STAFF. Agora avalie sua experiência.",
+              color: 0x9b59b6,
+              fields: [
+                { name: "🪙 Robux", value: `**${Number(order.robux_amount).toLocaleString("pt-BR")}**`, inline: true },
+                { name: "💵 Valor", value: `**${money(Number(order.total_price))}**`, inline: true }
+              ]
+            }],
+            components: [{
+              type: 1,
+              components: [
+                button(`space_review:${order.id}:1`, "1", "⭐"),
+                button(`space_review:${order.id}:2`, "2", "⭐"),
+                button(`space_review:${order.id}:3`, "3", "⭐"),
+                button(`space_review:${order.id}:4`, "4", "⭐"),
+                button(`space_review:${order.id}:5`, "5", "⭐")
+              ]
+            }]
+          })
+        });
+      } catch (error) { console.error("Delivered channel update error:", error); }
+    }
+
+    return interactionResponse(ephemeral("🟣 Pedido marcado como **ENTREGUE**. A avaliação foi enviada ao canal."));
+  }
+
+  // Avaliação rápida após a entrega.
+  if (customId.startsWith("space_review:")) {
+    const [, orderId, ratingText] = customId.split(":");
+    const rating = Number(ratingText);
+    if (!Number.isInteger(rating) || rating < 1 || rating > 5) return interactionResponse(ephemeral("❌ Avaliação inválida."));
+
+    const sb = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+    const { data: order } = await sb.from("orders").select("id,user_id,status,order_number").eq("id", orderId).single();
+    if (!order || order.status !== "delivered") return interactionResponse(ephemeral("❌ Este pedido ainda não está disponível para avaliação."));
+    const { data: owner } = await sb.from("users").select("id,discord_id").eq("id", order.user_id).single();
+    if (owner?.discord_id !== userId) return interactionResponse(ephemeral("❌ Apenas o comprador pode avaliar este pedido."));
+
+    const { data: existing } = await sb.from("reviews").select("id").eq("order_id", order.id).maybeSingle();
+    if (existing) return interactionResponse(ephemeral("⭐ Você já avaliou este pedido. Obrigado!"));
+
+    await sb.from("reviews").insert({ order_id: order.id, user_id: order.user_id, rating });
+    return interactionResponse(ephemeral(`⭐ Obrigado pela avaliação de **${rating}/5**!`));
   }
 
   if (customId === "space_cancel_order") {
