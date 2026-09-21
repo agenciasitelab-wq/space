@@ -44,6 +44,12 @@ export async function POST(req: NextRequest) {
         label: "COMPRAR ROBUX",
         emoji: { name: "🛒" },
         custom_id: "space_buy_robux"
+      }, {
+        type: 2,
+        style: 2,
+        label: "MEU PERFIL",
+        emoji: { name: "👤" },
+        custom_id: "space_profile"
       }]
     }]
   };
