@@ -1132,10 +1132,10 @@ export async function POST(req: NextRequest) {
   // Staff marca manualmente como entregue. A entrega continua 100% manual.
   if (customId.startsWith("space_mark_delivered:")) {
     const orderId = customId.slice("space_mark_delivered:".length);
-    const guildId = process.env.DISCORD_GUILD_ID;
-    const staffIds = guildId ? await getStaffRoleIds(guildId) : [];
-    if (!memberHasAnyRole(interaction, staffIds)) {
-      return interactionResponse(ephemeral("❌ Apenas a STAFF pode marcar um pedido como entregue."));
+    const deliveryStaffRoleId = "1551635518976950302";
+    const memberRoles = interaction.member?.roles ?? [];
+    if (!memberRoles.includes(deliveryStaffRoleId)) {
+      return interactionResponse(ephemeral("❌ Apenas a equipe autorizada para entrega pode marcar este pedido como entregue."));
     }
 
     const sb = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
