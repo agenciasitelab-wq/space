@@ -75,15 +75,179 @@ function modal(
   };
 }
 
-function ephemeral(content: string, components: any[] = []) {
+function ephemeral(content: string, components: any[] = [], embeds: any[] = []) {
   return {
     type: 4,
     data: {
       flags: 64,
-      content,
+      ...(content ? { content } : {}),
+      ...(embeds.length ? { embeds } : {}),
       ...(components.length ? { components } : {})
     }
   };
+}
+
+function publicMessage(content: string, components: any[] = [], embeds: any[] = []) {
+  return {
+    type: 4,
+    data: {
+      ...(content ? { content } : {}),
+      ...(embeds.length ? { embeds } : {}),
+      ...(components.length ? { components } : {})
+    }
+  };
+}
+
+function purchaseEmbed(
+  amount: number,
+  username?: string,
+  method?: DeliveryMethod,
+  total?: number,
+  status = "🟡 ABERTO"
+) {
+  const methodText = method ? methodLabel(method) : "Aguardando escolha";
+  const priceText =
+    typeof total === "number" ? money(total) : "Aguardando forma de envio";
+
+  return {
+    title: "🚀 SPACE REWARDS • SEU PEDIDO",
+    description:
+      "Confira os dados abaixo. Você pode alterar qualquer informação antes de concluir.",
+    color: status.startsWith("🟢") ? 0x57f287 : status.startsWith("🔴") ? 0xed4245 : 0xfee75c,
+    fields: [
+      { name: "🪙 Robux", value: `**${amount.toLocaleString("pt-BR")}**`, inline: true },
+      { name: "🎮 Roblox", value: username ? `**${username}**` : "Ainda não informado", inline: true },
+      { name: "📦 Forma de envio", value: `**${methodText}**`, inline: false },
+      { name: "💵 Total", value: `**${priceText}**`, inline: true },
+      { name: "📌 Status", value: `**${status}**`, inline: true }
+    ],
+    footer: { text: "SPACE Rewards • Compra de Robux" }
+  };
+}
+
+async function discordRequest(path: string, init: RequestInit = {}) {
+  const token = process.env.DISCORD_BOT_TOKEN;
+  if (!token) throw new Error("DISCORD_BOT_TOKEN não configurado");
+
+  const response = await fetch("https://discord.com/api/v10" + path, {
+    ...init,
+    headers: {
+      accept: "application/json",
+      "content-type": "application/json",
+      Authorization: "Bot " + token,
+      ...(init.headers ?? {})
+    }
+  });
+
+  const text = await response.text();
+  let data: any = null;
+  try { data = text ? JSON.parse(text) : null; } catch { data = { message: text }; }
+
+  if (!response.ok) {
+    throw new Error(
+      `Discord ${response.status} em ${path}: ${data?.message || text || "erro desconhecido"}`
+    );
+  }
+
+  return data;
+}
+
+const VIEW_CHANNEL = 1024;
+const SEND_MESSAGES = 2048;
+const READ_MESSAGE_HISTORY = 65536;
+const EMBED_LINKS = 16384;
+
+async function createPaymentChannel(
+  order: any,
+  discordUserId: string,
+  amount: number,
+  username: string,
+  method: DeliveryMethod,
+  total: number
+) {
+  const guildId = process.env.DISCORD_GUILD_ID;
+  if (!guildId) throw new Error("DISCORD_GUILD_ID não configurado");
+
+  const channels = await discordRequest(`/guilds/${guildId}/channels`, { method: "GET" });
+  const supportCategory = (channels as any[]).find(
+    (channel) => channel.type === 4 && channel.name === "🎫・SUPORTE"
+  );
+
+  if (!supportCategory) {
+    throw new Error('Categoria "🎫・SUPORTE" não encontrada no servidor.');
+  }
+
+  const roles = await discordRequest(`/guilds/${guildId}/roles`, { method: "GET" });
+  const allowedRoleNames = new Set([
+    "🎫・SPACE SUPPORT",
+    "🛡️・SPACE STAFF",
+    "💰・SPACE SELLER",
+    "🌌・SPACE DIRECTOR",
+    "👑・SPACE FOUNDER"
+  ]);
+
+  const allowedRoleIds = (roles as any[])
+    .filter((role) => allowedRoleNames.has(role.name))
+    .map((role) => role.id);
+
+  const me = await discordRequest("/users/@me", { method: "GET" });
+
+  const permission_overwrites = [
+    {
+      id: guildId,
+      type: 0,
+      allow: "0",
+      deny: String(VIEW_CHANNEL)
+    },
+    {
+      id: discordUserId,
+      type: 1,
+      allow: String(VIEW_CHANNEL | SEND_MESSAGES | READ_MESSAGE_HISTORY | EMBED_LINKS),
+      deny: "0"
+    },
+    {
+      id: me.id,
+      type: 1,
+      allow: String(VIEW_CHANNEL | SEND_MESSAGES | READ_MESSAGE_HISTORY | EMBED_LINKS),
+      deny: "0"
+    },
+    ...allowedRoleIds.map((roleId: string) => ({
+      id: roleId,
+      type: 0,
+      allow: String(VIEW_CHANNEL | SEND_MESSAGES | READ_MESSAGE_HISTORY | EMBED_LINKS),
+      deny: "0"
+    }))
+  ];
+
+  const channel = await discordRequest(`/guilds/${guildId}/channels`, {
+    method: "POST",
+    body: JSON.stringify({
+      name: `🟡・pedido-${order.order_number}`,
+      type: 0,
+      parent_id: supportCategory.id,
+      topic: `SPACE Rewards • Pedido #${order.order_number} • ${username}`,
+      permission_overwrites
+    })
+  });
+
+  await discordRequest(`/channels/${channel.id}/messages`, {
+    method: "POST",
+    body: JSON.stringify({
+      embeds: [{
+        ...purchaseEmbed(amount, username, method, total, "🟡 ABERTO"),
+        title: `🟡 SPACE REWARDS • PEDIDO #${order.order_number}`
+      }],
+      components: [{
+        type: 1,
+        components: [
+          button(`space_pay:${order.id}`, "GERAR PIX", "💳"),
+          button(`space_cancel_payment:${order.id}`, "CANCELAR PEDIDO", "❌", 4)
+        ]
+      }]
+    })
+  });
+
+  return channel;
 }
 
 function money(value: number) {
@@ -353,16 +517,9 @@ export async function POST(req: NextRequest) {
 
     return interactionResponse(
       ephemeral(
-        `✅ Quantidade: **${amount.toLocaleString("pt-BR")} Robux**`,
-        [{
-          type: 1,
-          components: [{
-            type: 2,
-            style: 1,
-            label: "USUÁRIO ROBLOX",
-            custom_id: `space_set_username:${amount}:_`
-          }]
-        }]
+        "",
+        purchaseButtons(amount),
+        [purchaseEmbed(amount)]
       )
     );
   }
@@ -411,8 +568,9 @@ export async function POST(req: NextRequest) {
 
     return interactionResponse(
       ephemeral(
-        purchaseSummary(amount, username),
-        purchaseButtons(amount, username)
+        "",
+        purchaseButtons(amount, username),
+        [purchaseEmbed(amount, username)]
       )
     );
   }
@@ -471,13 +629,14 @@ export async function POST(req: NextRequest) {
 
     return interactionResponse(
       ephemeral(
-        purchaseSummary(amount, username || undefined, method, total),
-        purchaseButtons(amount, username || undefined, method)
+        "",
+        purchaseButtons(amount, username || undefined, method),
+        [purchaseEmbed(amount, username || undefined, method, total)]
       )
     );
   }
 
-  // 7) Concluir -> valida tudo e cria pedido
+  // 7) Concluir -> cria o pedido e abre um canal privado para pagamento.
   if (customId.startsWith("space_finish:")) {
     const parts = customId.split(":");
     const amount = Number(parts[1]);
@@ -562,25 +721,100 @@ export async function POST(req: NextRequest) {
       }
     });
 
-    return interactionResponse(
-      ephemeral(
-        [
-          `✅ **Pedido #${order.order_number} criado!**`,
+    try {
+      const channel = await createPaymentChannel(
+        order,
+        userId,
+        amount,
+        username,
+        method,
+        total
+      );
+
+      await sb.from("orders")
+        .update({ discord_channel_id: channel.id })
+        .eq("id", order.id);
+
+      await sb.from("order_events").insert({
+        order_id: order.id,
+        event_type: "payment_channel_created",
+        description: "Canal privado do pedido criado no Discord.",
+        metadata: { channel_id: channel.id }
+      });
+
+      return interactionResponse(
+        ephemeral(
           "",
-          `🪙 Robux: **${amount.toLocaleString("pt-BR")}**`,
-          `🎮 Roblox: **${username}**`,
-          `📦 Método: **${pricing.displayName}**`,
-          `💵 Total: **${money(Number(order.total_price))}**`,
-          "",
-          "💳 **Próximo passo:** gerar o pagamento.",
-          "Seu pedido foi registrado como **aguardando pagamento**."
-        ].join("\n"),
-        [{
-          type: 1,
-          components: [button(`space_pay:${order.id}`, "PAGAR PEDIDO", "💳")]
-        }]
-      )
-    );
+          [{
+            type: 1,
+            components: [{
+              type: 2,
+              style: 5,
+              label: "ABRIR MEU PEDIDO",
+              url: `https://discord.com/channels/${process.env.DISCORD_GUILD_ID}/${channel.id}`
+            }]
+          }],
+          [{
+            ...purchaseEmbed(amount, username, method, total, "🟡 ABERTO"),
+            title: `🟡 PEDIDO #${order.order_number} ABERTO`,
+            description: "Seu pedido foi criado. O pagamento será realizado no canal privado abaixo."
+          }]
+        )
+      );
+    } catch (error: any) {
+      console.error("Payment channel creation error:", error);
+      await sb.from("orders").update({ status: "cancelled" }).eq("id", order.id);
+      await sb.from("order_events").insert({
+        order_id: order.id,
+        event_type: "payment_channel_failed",
+        description: "Não foi possível criar o canal privado do pedido.",
+        metadata: { error: String(error) }
+      });
+      return interactionResponse(
+        ephemeral(
+          "❌ Não consegui abrir o canal privado do seu pedido. O pedido foi cancelado para evitar cobrança sem canal."
+        )
+      );
+    }
+  }
+
+  if (customId.startsWith("space_cancel_payment:")) {
+    const orderId = customId.slice("space_cancel_payment:".length);
+    const sb = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+    const { data: order } = await sb
+      .from("orders")
+      .select("id,status,user_id")
+      .eq("id", orderId)
+      .single();
+
+    if (!order) return interactionResponse(ephemeral("❌ Pedido não encontrado."));
+    const { data: owner } = await sb.from("users").select("discord_id").eq("id", order.user_id).single();
+    if (owner?.discord_id !== userId) return interactionResponse(ephemeral("❌ Você não pode cancelar este pedido."));
+
+    if (order.status === "awaiting_payment" || order.status === "payment_pending") {
+      await sb.from("orders").update({ status: "cancelled" }).eq("id", order.id);
+      await sb.from("order_events").insert({
+        order_id: order.id,
+        event_type: "order_cancelled",
+        description: "Pedido cancelado pelo comprador."
+      });
+
+      const channelId = interaction.channel_id;
+      if (channelId) {
+        try {
+          await discordRequest(`/channels/${channelId}`, {
+            method: "PATCH",
+            body: JSON.stringify({ name: `🔴・pedido-cancelado-${order.id.slice(0, 6)}` })
+          });
+        } catch (error) {
+          console.error("Cancel channel rename error:", error);
+        }
+      }
+
+      return interactionResponse(ephemeral("🔴 Pedido cancelado."));
+    }
+
+    return interactionResponse(ephemeral(`❌ Este pedido não pode mais ser cancelado. Status: **${order.status}**`));
   }
 
   if (customId === "space_cancel_order") {
@@ -593,6 +827,26 @@ export async function POST(req: NextRequest) {
   if (customId.startsWith("space_pay:")) {
     const orderId = customId.slice("space_pay:".length);
     if (!orderId) return interactionResponse(ephemeral("❌ Pedido inválido."));
+
+    const sb = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+    const { data: order } = await sb.from("orders")
+      .select("id,status,discord_channel_id,user_id")
+      .eq("id", orderId)
+      .single();
+
+    if (!order || order.discord_channel_id !== interaction.channel_id) {
+      return interactionResponse(ephemeral("❌ Este pagamento só pode ser iniciado no canal do próprio pedido."));
+    }
+
+    const { data: owner } = await sb.from("users").select("discord_id").eq("id", order.user_id).single();
+    if (owner?.discord_id !== userId) {
+      return interactionResponse(ephemeral("❌ Apenas o comprador pode iniciar o pagamento."));
+    }
+
+    if (order.status !== "awaiting_payment" && order.status !== "payment_pending") {
+      return interactionResponse(ephemeral(`❌ Este pedido está **${order.status}**.`));
+    }
+
     return interactionResponse(modal(
       `space_cpf_submit:${orderId}`,
       "Pagamento PIX",
@@ -741,7 +995,24 @@ export async function POST(req: NextRequest) {
         });
       }
 
-      return interactionResponse(ephemeral(lines, components));
+      return interactionResponse(
+        publicMessage(
+          "",
+          components,
+          [{
+            title: `🟡 PAGAMENTO • PEDIDO #${order.order_number}`,
+            description: "Use o PIX abaixo para concluir o pagamento. O status mudará automaticamente quando o Asaas confirmar.",
+            color: 0xfee75c,
+            fields: [
+              { name: "💵 Valor", value: `**${money(Number(order.total_price))}**`, inline: true },
+              { name: "🪙 Robux", value: `**${Number(order.robux_amount).toLocaleString("pt-BR")}**`, inline: true },
+              { name: "📲 PIX COPIA E COLA", value: `\\`\\`\\`\\n${String(pix.payload || "Não disponível")}\\n\\`\\`\\``, inline: false },
+              { name: "⏳ Expira em", value: String(pix.expirationDate || "conforme cobrança"), inline: false }
+            ],
+            footer: { text: "🟡 Aberto • Aguardando pagamento" }
+          }]
+        )
+      );
     } catch (error: any) {
       console.error("Asaas payment creation error:", error);
 
