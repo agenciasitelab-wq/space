@@ -316,12 +316,65 @@ function methodLabel(method: DeliveryMethod) {
   }
 }
 
-function purchaseButtons(
+async function getDeliveryPricing(amount: number) {
+  const sb = createClient(
+    process.env.SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+
+  const { data, error } = await sb
+    .from("pricing")
+    .select("method,display_name,price_per_1000")
+    .in("method", [...VALID_METHODS])
+    .eq("active", true);
+
+  if (error || !data) return [];
+
+  return data.map((item: any) => ({
+    method: item.method as DeliveryMethod,
+    displayName: String(item.display_name),
+    rate: Number(item.price_per_1000)
+  }));
+}
+
+function receivedRobux(amount: number, method: DeliveryMethod) {
+  return method === "gamepass_no_fee"
+    ? Math.floor(amount * 0.70)
+    : amount;
+}
+
+async function purchaseButtons(
   amount: number,
   username?: string,
   method?: DeliveryMethod
 ) {
   const encodedUser = username ? encode(username) : "_";
+  const pricing = await getDeliveryPricing(amount);
+
+  const methodOrder: DeliveryMethod[] = [
+    "plus",
+    "group",
+    "gamepass_fee",
+    "gamepass_no_fee"
+  ];
+
+  const options = methodOrder
+    .map((deliveryMethod) => {
+      const item = pricing.find((price) => price.method === deliveryMethod);
+      if (!item) return null;
+
+      const total = Math.round((amount / 1000) * item.rate * 100) / 100;
+      const received = receivedRobux(amount, deliveryMethod);
+
+      return {
+        label: `${methodLabel(deliveryMethod)} • ${money(total)}`,
+        value: deliveryMethod,
+        description: `Você recebe ${received.toLocaleString("pt-BR")} Robux`,
+        emoji: { name: deliveryMethod === "plus" ? "💎" : deliveryMethod === "group" ? "👥" : "🎮" },
+        default: method === deliveryMethod
+      };
+    })
+    .filter(Boolean);
 
   return [
     {
@@ -331,12 +384,20 @@ function purchaseButtons(
           `space_set_username:${amount}:${encodedUser}:${method ?? "_"}`,
           username ? "ALTERAR ROBLOX" : "USUÁRIO ROBLOX",
           "🎮"
-        ),
-        button(
-          `space_set_method:${amount}:${encodedUser}`,
-          method ? "ALTERAR ENVIO" : "FORMA DE ENVIO",
-          "📦"
         )
+      ]
+    },
+    {
+      type: 1,
+      components: [
+        {
+          type: 3,
+          custom_id: `space_select_method:${amount}:${encodedUser}`,
+          placeholder: method ? `📦 ${methodLabel(method)}` : "📦 Escolha a forma de envio",
+          min_values: 1,
+          max_values: 1,
+          options
+        }
       ]
     },
     {
@@ -499,10 +560,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const components = await purchaseButtons(amount);
+
     return interactionResponse(
       ephemeral(
         "",
-        purchaseButtons(amount),
+        components,
         [purchaseEmbed(amount)]
       )
     );
@@ -555,66 +618,53 @@ export async function POST(req: NextRequest) {
     }
 
     if (!/^[A-Za-z0-9_]{3,20}$/.test(username)) {
+      const components = await purchaseButtons(
+        amount,
+        undefined,
+        currentMethod || undefined
+      );
+
       return interactionResponse(
         updateMessage(
           "❌ **Username Roblox inválido.** Use de 3 a 20 caracteres: letras, números ou _.",
-          purchaseButtons(amount, undefined, currentMethod || undefined),
+          components,
           [purchaseEmbed(amount, undefined, currentMethod || undefined)]
         )
       );
     }
 
+    const components = await purchaseButtons(
+      amount,
+      username,
+      currentMethod || undefined
+    );
+
     return interactionResponse(
       updateMessage(
         "",
-        purchaseButtons(amount, username, currentMethod || undefined),
+        components,
         [purchaseEmbed(amount, username, currentMethod || undefined)]
       )
     );
   }
 
-  // 5) Botão Forma de envio -> modal
-  if (customId.startsWith("space_set_method:")) {
+  // 5) Select de forma de envio -> atualiza o mesmo resumo
+  if (customId.startsWith("space_select_method:")) {
     const parts = customId.split(":");
     const amount = Number(parts[1]);
     const encodedUser = parts[2] ?? "_";
     const username = encodedUser !== "_" ? decode(encodedUser) : "";
+    const selectedValue = String(data.values?.[0] ?? "");
+    const method = normalizeMethod(selectedValue);
 
-    if (!Number.isInteger(amount) || amount < MIN_ROBUX || amount > MAX_ROBUX) {
-      return interactionResponse(ephemeral("❌ Pedido inválido. Inicie a compra novamente."));
-    }
-
-    return interactionResponse(
-      modal(
-        `space_method_submit:${amount}:${encodedUser}`,
-        "Forma de envio",
-        "delivery_method",
-        "Escolha a forma de envio",
-        "1 PLUS | 2 GRUPO | 3 GAMEPASS + TAXA | 4 GAMEPASS SEM TAXA",
-        30
-      )
-    );
-  }
-
-  // 6) Submit da forma de envio -> calcula preço e mostra resumo
-  if (customId.startsWith("space_method_submit:")) {
-    const parts = customId.split(":");
-    const amount = Number(parts[1]);
-    const encodedUser = parts[2] ?? "_";
-    const username = encodedUser !== "_" ? decode(encodedUser) : "";
-    const method = normalizeMethod(getModalValue(data, "delivery_method"));
-
-    if (!Number.isInteger(amount) || amount < MIN_ROBUX || amount > MAX_ROBUX) {
-      return interactionResponse(ephemeral("❌ Pedido inválido. Inicie a compra novamente."));
-    }
-
-    if (!method) {
+    if (
+      !Number.isInteger(amount) ||
+      amount < MIN_ROBUX ||
+      amount > MAX_ROBUX ||
+      !method
+    ) {
       return interactionResponse(
-        updateMessage(
-          "❌ **Forma de envio inválida.** Use: **1** PLUS • **2** GRUPO • **3** GAMEPASS + TAXA • **4** GAMEPASS SEM TAXA",
-          purchaseButtons(amount, username || undefined),
-          [purchaseEmbed(amount, username || undefined)]
-        )
+        ephemeral("❌ Pedido inválido. Inicie a compra novamente.")
       );
     }
 
@@ -626,11 +676,16 @@ export async function POST(req: NextRequest) {
     }
 
     const total = Math.round((amount / 1000) * pricing.rate * 100) / 100;
+    const components = await purchaseButtons(
+      amount,
+      username || undefined,
+      method
+    );
 
     return interactionResponse(
       updateMessage(
         "",
-        purchaseButtons(amount, username || undefined, method),
+        components,
         [purchaseEmbed(amount, username || undefined, method, total)]
       )
     );
