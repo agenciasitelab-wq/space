@@ -305,33 +305,6 @@ function methodLabel(method: DeliveryMethod) {
   }
 }
 
-function purchaseSummary(
-  amount: number,
-  username?: string,
-  method?: DeliveryMethod,
-  total?: number
-) {
-  const userLine = username ? `🎮 Roblox: **${username}**` : "🎮 Roblox: **Não informado**";
-  const methodLine = method
-    ? `📦 Forma de envio: **${methodLabel(method)}**`
-    : "📦 Forma de envio: **Não informado**";
-  const priceLine =
-    typeof total === "number"
-      ? `💵 Valor: **${money(total)}**`
-      : "💵 Valor: **Aguardando forma de envio**";
-
-  return [
-    "🚀 **SPACE REWARDS — SEU PEDIDO**",
-    "",
-    `🪙 Robux: **${amount.toLocaleString("pt-BR")}**`,
-    userLine,
-    methodLine,
-    priceLine,
-    "",
-    "Preencha os dados abaixo e depois clique em **CONCLUIR**."
-  ].join("\n");
-}
-
 function purchaseButtons(
   amount: number,
   username?: string,
