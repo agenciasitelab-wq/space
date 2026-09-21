@@ -845,6 +845,47 @@ export async function POST(req: NextRequest) {
       return interactionResponse(ephemeral("❌ Este método está indisponível."));
     }
 
+    // Idempotência: um comprador não pode abrir dois pedidos de pagamento ao mesmo tempo.
+    // Isso também protege quando o Discord demora a responder e o usuário clica em CONCLUIR novamente.
+    const { data: openOrder } = await sb
+      .from("orders")
+      .select("id,order_number,status,discord_channel_id")
+      .eq("user_id", user.id)
+      .in("status", ["awaiting_payment", "payment_pending"])
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (openOrder) {
+      if (openOrder.discord_channel_id) {
+        return interactionResponse(
+          updateMessage(
+            "⚠️ **Você já possui um pedido em aberto.**",
+            [{
+              type: 1,
+              components: [{
+                type: 2,
+                style: 5,
+                label: "ABRIR PEDIDO EXISTENTE",
+                url: `https://discord.com/channels/${process.env.DISCORD_GUILD_ID}/${openOrder.discord_channel_id}`
+              }]
+            }],
+            [{
+              title: "🟡 PEDIDO JÁ ABERTO",
+              description: `O pedido **#${openOrder.order_number}** já está aguardando pagamento. Não criamos outro pedido para evitar cobrança duplicada.`,
+              color: 0xfee75c
+            }]
+          )
+        );
+      }
+
+      return interactionResponse(
+        ephemeral(
+          `⏳ Seu pedido **#${openOrder.order_number}** já está sendo criado. Aguarde alguns segundos e não clique em concluir novamente.`
+        )
+      );
+    }
+
     const total = Math.round((amount / 1000) * pricing.rate * 100) / 100;
     let robloxUser: { id: string; name: string; displayName: string } | null = null;
     try {
@@ -889,6 +930,41 @@ export async function POST(req: NextRequest) {
 
     if (orderError || !order) {
       console.error("Order creation error:", orderError);
+
+      // Proteção extra para uma corrida entre dois cliques simultâneos.
+      if ((orderError as any)?.code === "23505") {
+        const { data: existingOrder } = await sb
+          .from("orders")
+          .select("id,order_number,status,discord_channel_id")
+          .eq("user_id", user.id)
+          .in("status", ["awaiting_payment", "payment_pending"])
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (existingOrder?.discord_channel_id) {
+          return interactionResponse(
+            updateMessage(
+              "⚠️ **Pedido já criado.**",
+              [{
+                type: 1,
+                components: [{
+                  type: 2,
+                  style: 5,
+                  label: "ABRIR PEDIDO",
+                  url: `https://discord.com/channels/${process.env.DISCORD_GUILD_ID}/${existingOrder.discord_channel_id}`
+                }]
+              }],
+              [{
+                title: `🟡 PEDIDO #${existingOrder.order_number}`,
+                description: "Já existe um pedido aberto para sua conta. Use o canal existente para continuar.",
+                color: 0xfee75c
+              }]
+            )
+          );
+        }
+      }
+
       return interactionResponse(
         ephemeral("❌ Não foi possível criar seu pedido. Tente novamente.")
       );
