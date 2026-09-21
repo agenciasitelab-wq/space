@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
 
   const { data: order, error: orderError } = await sb
     .from("orders")
-    .select("id,order_number,status,total_price")
+    .select("id,order_number,status,total_price,user_id")
     .eq("payment_id", paymentId)
     .maybeSingle();
 
@@ -63,7 +63,12 @@ export async function POST(req: NextRequest) {
   });
 
   if (event === "PAYMENT_RECEIVED") {
-    if (order.status !== "paid" && order.status !== "processing" && order.status !== "delivered") {
+    const alreadyPaid =
+      order.status === "paid" ||
+      order.status === "processing" ||
+      order.status === "delivered";
+
+    if (!alreadyPaid) {
       await sb.from("orders").update({
         status: "paid",
         paid_at: new Date().toISOString()
@@ -74,6 +79,81 @@ export async function POST(req: NextRequest) {
         event_type: "payment_received",
         description: "Pagamento PIX confirmado pelo Asaas."
       });
+
+      // Notifica o comprador por DM. Falha no Discord não invalida o webhook.
+      try {
+        const { data: user } = await sb
+          .from("users")
+          .select("discord_id")
+          .eq("id", order.user_id)
+          .single();
+
+        const botToken = process.env.DISCORD_BOT_TOKEN;
+
+        if (user?.discord_id && botToken) {
+          const dmResponse = await fetch(
+            "https://discord.com/api/v10/users/@me/channels",
+            {
+              method: "POST",
+              headers: {
+                Authorization: "Bot " + botToken,
+                "Content-Type": "application/json"
+              },
+              body: JSON.stringify({ recipient_id: user.discord_id })
+            }
+          );
+
+          const dmChannel = await dmResponse.json().catch(() => null);
+
+          if (!dmResponse.ok || !dmChannel?.id) {
+            throw new Error(
+              "Discord DM channel error " +
+                dmResponse.status +
+                ": " +
+                JSON.stringify(dmChannel)
+            );
+          }
+
+          const messageResponse = await fetch(
+            `https://discord.com/api/v10/channels/${dmChannel.id}/messages`,
+            {
+              method: "POST",
+              headers: {
+                Authorization: "Bot " + botToken,
+                "Content-Type": "application/json"
+              },
+              body: JSON.stringify({
+                content: [
+                  `✅ **Pagamento confirmado — Pedido #${order.order_number}**`,
+                  "",
+                  `💵 Valor pago: **R$ ${Number(order.total_price).toFixed(2).replace(".", ",")}**`,
+                  "",
+                  "🚀 Seu pedido foi confirmado pelo SPACE Rewards.",
+                  "📦 A entrega dos Robux seguirá o processamento do pedido."
+                ].join("\n")
+              })
+            }
+          );
+
+          if (!messageResponse.ok) {
+            const details = await messageResponse.text();
+            throw new Error(
+              "Discord DM message error " +
+                messageResponse.status +
+                ": " +
+                details
+            );
+          }
+        }
+      } catch (error) {
+        console.error("Discord payment confirmation notification error:", error);
+        await sb.from("order_events").insert({
+          order_id: order.id,
+          event_type: "payment_notification_failed",
+          description: "Pagamento confirmado, mas a DM do Discord não pôde ser enviada.",
+          metadata: { error: String(error) }
+        });
+      }
     }
   }
 
