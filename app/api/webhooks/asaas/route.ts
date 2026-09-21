@@ -309,6 +309,29 @@ export async function POST(req: NextRequest) {
         } catch (error) {
           console.error("Discord expired channel update error:", error);
         }
+
+        try {
+          const messagesResponse = await fetch(
+            `https://discord.com/api/v10/channels/${order.discord_channel_id}/messages?limit=50`,
+            { headers: { Authorization: "Bot " + process.env.DISCORD_BOT_TOKEN } }
+          );
+          const messages: any[] = await messagesResponse.json();
+          for (const message of Array.isArray(messages) ? messages : []) {
+            const hasPaymentAction = (message.components || []).some((row: any) =>
+              (row.components || []).some((component: any) =>
+                String(component.custom_id || "").startsWith("space_pay:")
+              )
+            );
+            if (hasPaymentAction) {
+              await discordRequest(`/channels/${order.discord_channel_id}/messages/${message.id}`, {
+                method: "PATCH",
+                body: JSON.stringify({ components: [] })
+              });
+            }
+          }
+        } catch (error) {
+          console.error("Expired order action cleanup error:", error);
+        }
       }
     }
   }
