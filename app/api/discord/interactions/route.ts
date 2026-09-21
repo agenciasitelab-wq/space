@@ -527,7 +527,7 @@ export async function POST(req: NextRequest) {
 
     return interactionResponse(
       modal(
-        `space_username_submit:${amount}:${encode(currentUsername || "_")}`,
+        `space_username_submit:${amount}:${encode(currentUsername || "_")}:${currentMethod ?? "_"}`,
         "Conta Roblox",
         "roblox_username",
         "Usuário Roblox",
@@ -542,7 +542,7 @@ export async function POST(req: NextRequest) {
     const parts = customId.split(":");
     const amount = Number(parts[1]);
     const currentMethod =
-      parts[2] && parts[2] !== "_" ? (parts[2] as DeliveryMethod) : null;
+      parts[3] && parts[3] !== "_" ? (parts[3] as DeliveryMethod) : null;
     const username = getModalValue(data, "roblox_username");
 
     if (
