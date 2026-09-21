@@ -1160,6 +1160,9 @@ export async function POST(req: NextRequest) {
       metadata: { discord_staff_id: userId }
     });
 
+    const guildId = process.env.DISCORD_GUILD_ID;
+    if (!guildId) return interactionResponse(ephemeral("❌ Configuração do servidor não encontrada."));
+
     const roles = await discordRequest(`/guilds/${guildId}/roles`, { method: "GET" });
     const memberRole = (roles as any[]).find((r: any) => r.name === "🚀・SPACE MEMBER");
     const eliteRole = (roles as any[]).find((r: any) => r.name === "💎・SPACE ELITE");
