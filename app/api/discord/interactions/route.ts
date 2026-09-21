@@ -128,8 +128,7 @@ export async function POST(req: NextRequest) {
     }
 
     return interactionResponse(ephemeral(
-      `🪙 Quantidade: **${amount.toLocaleString("pt-BR")} Robux**\\n\\nAgora informe a conta Roblox que receberá os Robux.`,
-      [[button(`space_roblox_next:${amount}`, "INFORMAR ROBLOX", "🎮")]]
+      `🪙 Quantidade: **${amount.toLocaleString("pt-BR")} Robux**\\n\\nAgora informe a conta Roblox que receberá os Robux.`
     ));
   }
 
