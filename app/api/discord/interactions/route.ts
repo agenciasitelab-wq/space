@@ -273,7 +273,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // 2) Quantidade -> resposta mínima de diagnóstico
+  // 2) Quantidade -> resumo da compra + botões
   if (customId === "space_robux_amount") {
     const rawAmount = getModalValue(data, "robux_amount");
     const amount = Number(rawAmount);
@@ -296,7 +296,17 @@ export async function POST(req: NextRequest) {
 
     return interactionResponse(
       ephemeral(
-        `✅ Quantidade recebida: **${amount.toLocaleString("pt-BR")} Robux**`
+        purchaseSummary(amount),
+        [
+          [
+            button(`space_set_username:${amount}:_`, "USUÁRIO ROBLOX", "🎮"),
+            button(`space_set_method:${amount}:_`, "FORMA DE ENVIO", "📦")
+          ],
+          [
+            button(`space_finish:${amount}:_:_`, "CONCLUIR", "✅"),
+            button("space_cancel_order", "CANCELAR", "❌", 4)
+          ]
+        ]
       )
     );
   }
