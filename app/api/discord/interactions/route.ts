@@ -1449,7 +1449,6 @@ export async function POST(req: NextRequest) {
         { method: "GET" }
       );
 
-      const pixPayload = String(pix.payload || "");
       const expiration = formatPixExpiration(pix.expirationDate);
 
       return interactionResponse(
@@ -1469,7 +1468,7 @@ export async function POST(req: NextRequest) {
             fields: [
               { name: "💵 Valor", value: "**" + money(Number(order.total_price)) + "**", inline: true },
               { name: "🪙 Robux", value: "**" + Number(order.robux_amount).toLocaleString("pt-BR") + "**", inline: true },
-              { name: "📲 PIX COPIA E COLA", value: pixPayload ? "```" + pixPayload + "```" : "Não disponível", inline: false },
+              { name: "📲 Pagamento", value: "**PIX disponível abaixo**\nUse **COPIAR PIX** ou **GERAR QR CODE**.", inline: false },
               { name: "⏳ Expira em", value: "**" + expiration + "**", inline: false }
             ],
             footer: { text: "🟡 Aberto • Aguardando pagamento" }
