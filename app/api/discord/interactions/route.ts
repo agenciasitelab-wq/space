@@ -518,7 +518,7 @@ async function acknowledgeInteraction(interaction: any, body: any) {
   }
 }
 async function sendQrFollowup(interaction: any, encodedImage: string) {
-  const base64 = String(encodedImage || "").replace(/^data:image\\/png;base64,/, "");
+  const base64 = String(encodedImage || "").replace(/^data:image\/png;base64,/, "");
   if (!base64) throw new Error("QR Code não retornado pelo Asaas.");
   const binary = Buffer.from(base64, "base64");
   const form = new FormData();
