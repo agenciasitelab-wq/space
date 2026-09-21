@@ -176,26 +176,32 @@ function purchaseButtons(
   const encodedUser = username ? encode(username) : "_";
 
   return [
-    [
-      button(
-        `space_set_username:${amount}:${encodedUser}`,
-        username ? "ALTERAR ROBLOX" : "USUÁRIO ROBLOX",
-        "🎮"
-      ),
-      button(
-        `space_set_method:${amount}:${encodedUser}`,
-        method ? "ALTERAR ENVIO" : "FORMA DE ENVIO",
-        "📦"
-      )
-    ],
-    [
-      button(
-        `space_finish:${amount}:${encodedUser}:${method ?? "_"}`,
-        "CONCLUIR",
-        "✅"
-      ),
-      button("space_cancel_order", "CANCELAR", "❌", 4)
-    ]
+    {
+      type: 1,
+      components: [
+        button(
+          `space_set_username:${amount}:${encodedUser}`,
+          username ? "ALTERAR ROBLOX" : "USUÁRIO ROBLOX",
+          "🎮"
+        ),
+        button(
+          `space_set_method:${amount}:${encodedUser}`,
+          method ? "ALTERAR ENVIO" : "FORMA DE ENVIO",
+          "📦"
+        )
+      ]
+    },
+    {
+      type: 1,
+      components: [
+        button(
+          `space_finish:${amount}:${encodedUser}:${method ?? "_"}`,
+          "CONCLUIR",
+          "✅"
+        ),
+        button("space_cancel_order", "CANCELAR", "❌", 4)
+      ]
+    }
   ];
 }
 
@@ -297,14 +303,15 @@ export async function POST(req: NextRequest) {
     return interactionResponse(
       ephemeral(
         `✅ Quantidade: **${amount.toLocaleString("pt-BR")} Robux**`,
-        [[
-          {
+        [{
+          type: 1,
+          components: [{
             type: 2,
             style: 1,
             label: "USUÁRIO ROBLOX",
             custom_id: `space_set_username:${amount}:_`
-          }
-        ]]
+          }]
+        }]
       )
     );
   }
@@ -517,7 +524,10 @@ export async function POST(req: NextRequest) {
           "💳 **Próximo passo:** gerar o pagamento.",
           "Seu pedido foi registrado como **aguardando pagamento**."
         ].join("\n"),
-        [[button(`space_pay:${order.id}`, "PAGAR PEDIDO", "💳")]]
+        [{
+          type: 1,
+          components: [button(`space_pay:${order.id}`, "PAGAR PEDIDO", "💳")]
+        }]
       )
     );
   }
