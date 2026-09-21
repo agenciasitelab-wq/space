@@ -523,8 +523,14 @@ async function sendQrFollowup(interaction: any, encodedImage: string) {
   const binary = Buffer.from(base64, "base64");
   const form = new FormData();
   form.append("payload_json", JSON.stringify({
-    content: "📲 **QR Code PIX**\\nAponte a câmera do seu banco para o código abaixo.",
     flags: 64,
+    embeds: [{
+      title: "📲 PIX • QR CODE",
+      description: "Escaneie o código abaixo com o aplicativo do seu banco para realizar o pagamento.\\n\\n🔒 **Pagamento seguro**\\nO pagamento será confirmado automaticamente após a aprovação.",
+      color: 0x5865F2,
+      image: { url: "attachment://pix-qrcode.png" },
+      footer: { text: "SPACE Rewards • PIX" }
+    }],
     attachments: [{ id: 0, filename: "pix-qrcode.png" }]
   }));
   form.append("files[0]", new Blob([binary], { type: "image/png" }), "pix-qrcode.png");
