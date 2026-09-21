@@ -129,9 +129,44 @@ export async function POST(req: NextRequest) {
                   { name: "📌 Status", value: "**🟢 PAGO**", inline: true }
                 ],
                 footer: { text: "SPACE Rewards • Pagamento confirmado" }
+              }],
+              components: [{
+                type: 1,
+                components: [{
+                  type: 2,
+                  style: 1,
+                  label: "MARCAR COMO ENTREGUE",
+                  emoji: { name: "📦" },
+                  custom_id: `space_mark_delivered:${order.id}`
+                }]
               }]
             })
           });
+
+          // Remove os componentes de mensagens antigas de PIX para evitar
+          // que o comprador tente gerar/cancelar um pagamento já confirmado.
+          try {
+            const messagesResponse = await fetch(
+              `https://discord.com/api/v10/channels/${order.discord_channel_id}/messages?limit=20`,
+              {
+                headers: {
+                  Authorization: "Bot " + process.env.DISCORD_BOT_TOKEN
+                }
+              }
+            );
+            const messages: any[] = await messagesResponse.json();
+            for (const message of Array.isArray(messages) ? messages : []) {
+              const title = message?.embeds?.[0]?.title || "";
+              if (title.includes("PAGAMENTO • PEDIDO #" + order.order_number) && message.components?.length) {
+                await discordRequest(`/channels/${order.discord_channel_id}/messages/${message.id}`, {
+                  method: "PATCH",
+                  body: JSON.stringify({ components: [] })
+                });
+              }
+            }
+          } catch (error) {
+            console.error("Payment message cleanup error:", error);
+          }
         } catch (error) {
           console.error("Discord paid channel update error:", error);
           await sb.from("order_events").insert({
