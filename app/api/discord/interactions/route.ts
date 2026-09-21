@@ -209,6 +209,35 @@ async function interactionResponse(body: any) {
   return NextResponse.json(body);
 }
 
+
+async function asaasRequest(path: string, init: RequestInit = {}) {
+  const apiKey = process.env.ASAAS_API_KEY;
+  if (!apiKey) throw new Error("ASAAS_API_KEY não configurada");
+  const response = await fetch("https://api-sandbox.asaas.com/v3" + path, {
+    ...init,
+    headers: { accept: "application/json", "content-type": "application/json", access_token: apiKey, ...(init.headers ?? {}) }
+  });
+  const text = await response.text();
+  let data: any = null;
+  try { data = text ? JSON.parse(text) : null; } catch { data = { message: text }; }
+  if (!response.ok) {
+    console.error("Asaas API error:", response.status, data);
+    throw new Error(data?.errors?.[0]?.description || data?.message || ("Asaas HTTP " + response.status));
+  }
+  return data;
+}
+function normalizeCpf(value: string) { return value.replace(/[^0-9]/g, ""); }
+function validCpf(value: string) {
+  const cpf = normalizeCpf(value);
+  if (cpf.length !== 11 || /^(\d)\1{10}$/.test(cpf)) return false;
+  let sum = 0;
+  for (let i = 0; i < 9; i++) sum += Number(cpf[i]) * (10 - i);
+  let digit = (sum * 10) % 11; if (digit === 10) digit = 0;
+  if (digit !== Number(cpf[9])) return false;
+  sum = 0; for (let i = 0; i < 10; i++) sum += Number(cpf[i]) * (11 - i);
+  digit = (sum * 10) % 11; if (digit === 10) digit = 0;
+  return digit === Number(cpf[10]);
+}
 async function getPricing(method: DeliveryMethod) {
   const sb = createClient(
     process.env.SUPABASE_URL!,
@@ -538,13 +567,106 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Pagamento será conectado ao Asaas na próxima etapa.
+  // Pagamento -> solicita CPF e cria cobrança PIX no Asaas.
   if (customId.startsWith("space_pay:")) {
-    return interactionResponse(
-      ephemeral(
-        "💳 O pagamento automático será liberado na próxima etapa, quando conectarmos o Asaas."
-      )
-    );
+    const orderId = customId.slice("space_pay:".length);
+    if (!orderId) return interactionResponse(ephemeral("❌ Pedido inválido."));
+    return interactionResponse(modal(
+      `space_cpf_submit:${orderId}`,
+      "Pagamento PIX",
+      "cpf",
+      "CPF do pagador",
+      "Somente números ou com pontuação",
+      14
+    ));
+  }
+
+  if (customId.startsWith("space_cpf_submit:")) {
+    const orderId = customId.slice("space_cpf_submit:".length);
+    const cpf = normalizeCpf(getModalValue(data, "cpf"));
+    if (!validCpf(cpf)) return interactionResponse(ephemeral("❌ CPF inválido. Confira os números e tente novamente."));
+
+    const sb = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+    const { data: order, error: orderError } = await sb.from("orders")
+      .select("id,order_number,total_price,status,robux_amount,roblox_username,user_id")
+      .eq("id", orderId).single();
+    if (orderError || !order) return interactionResponse(ephemeral("❌ Pedido não encontrado."));
+    if (order.status !== "awaiting_payment" && order.status !== "payment_pending") {
+      return interactionResponse(ephemeral(`❌ Este pedido está com status **${order.status}** e não pode gerar um novo pagamento.`));
+    }
+
+    const { data: user, error: userError } = await sb.from("users")
+      .select("id,discord_id,discord_username,discord_email,verified")
+      .eq("id", order.user_id).single();
+    if (userError || !user?.verified || user.discord_id !== userId) {
+      return interactionResponse(ephemeral("❌ Não foi possível validar o comprador."));
+    }
+    if (!user.discord_email) return interactionResponse(ephemeral("❌ Sua conta não possui e-mail registrado. Refazer a verificação do Discord pode resolver isso."));
+
+    try {
+      const customer = await asaasRequest("/customers", {
+        method: "POST",
+        body: JSON.stringify({
+          name: user.discord_username || ("SPACE " + userId),
+          cpfCnpj: cpf,
+          email: user.discord_email,
+          externalReference: "space-order-" + order.id,
+          notificationDisabled: false
+        })
+      });
+
+      const payment = await asaasRequest("/payments", {
+        method: "POST",
+        body: JSON.stringify({
+          customer: customer.id,
+          billingType: "PIX",
+          value: Number(order.total_price),
+          dueDate: new Date().toISOString().slice(0, 10),
+          description: "SPACE Rewards — Pedido #" + order.order_number,
+          externalReference: order.id
+        })
+      });
+
+      const pix = await asaasRequest("/payments/" + payment.id + "/pixQrCode", { method: "GET" });
+
+      await sb.from("orders").update({
+        status: "payment_pending",
+        payment_provider: "asaas",
+        payment_id: payment.id
+      }).eq("id", order.id);
+
+      await sb.from("order_events").insert({
+        order_id: order.id,
+        event_type: "payment_created",
+        description: "Cobrança PIX criada no Asaas.",
+        metadata: { provider: "asaas", payment_id: payment.id, customer_id: customer.id }
+      });
+
+      const lines = [
+        `💳 **PAGAMENTO DO PEDIDO #${order.order_number}**`,
+        "",
+        `💵 Valor: **${money(Number(order.total_price))}**`,
+        `🪙 Robux: **${Number(order.robux_amount).toLocaleString("pt-BR")}**`,
+        "",
+        "📲 **PIX COPIA E COLA:**",
+        "```",
+        String(pix.payload || "Não disponível"),
+        "```",
+        "",
+        `⏳ Expira em: **${pix.expirationDate || "conforme cobrança"}**`,
+        "",
+        "Após o pagamento, o sistema atualizará o pedido automaticamente."
+      ].join("\n");
+
+      const components: any[] = [];
+      if (payment.invoiceUrl) {
+        components.push({ type: 1, components: [{ type: 2, style: 5, label: "ABRIR PAGAMENTO", url: payment.invoiceUrl }] });
+      }
+      return interactionResponse(ephemeral(lines, components));
+    } catch (error: any) {
+      console.error("Asaas payment creation error:", error);
+      return interactionResponse(ephemeral("❌ Não foi possível gerar o PIX agora. Verifique a configuração do Asaas Sandbox e tente novamente."));
+    }
   }
 
   return interactionResponse(
