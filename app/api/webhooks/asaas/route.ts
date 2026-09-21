@@ -1,6 +1,33 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
+async function discordRequest(path: string, init: RequestInit = {}) {
+  const token = process.env.DISCORD_BOT_TOKEN;
+  if (!token) throw new Error("DISCORD_BOT_TOKEN não configurado");
+
+  const response = await fetch("https://discord.com/api/v10" + path, {
+    ...init,
+    headers: {
+      accept: "application/json",
+      "content-type": "application/json",
+      Authorization: "Bot " + token,
+      ...(init.headers ?? {})
+    }
+  });
+
+  const text = await response.text();
+  let data: any = null;
+  try { data = text ? JSON.parse(text) : null; } catch { data = { message: text }; }
+
+  if (!response.ok) {
+    throw new Error(
+      `Discord ${response.status} em ${path}: ${data?.message || text || "erro desconhecido"}`
+    );
+  }
+
+  return data;
+}
+
 export async function POST(req: NextRequest) {
   const expectedToken = process.env.ASAAS_WEBHOOK_TOKEN;
   const receivedToken = req.headers.get("asaas-access-token");
@@ -41,7 +68,7 @@ export async function POST(req: NextRequest) {
 
   const { data: order, error: orderError } = await sb
     .from("orders")
-    .select("id,order_number,status,total_price,user_id")
+    .select("id,order_number,status,total_price,user_id,discord_channel_id")
     .eq("payment_id", paymentId)
     .maybeSingle();
 
@@ -79,6 +106,42 @@ export async function POST(req: NextRequest) {
         event_type: "payment_received",
         description: "Pagamento PIX confirmado pelo Asaas."
       });
+
+      // Atualiza o canal do pedido para 🟢 PAGO.
+      if (order.discord_channel_id) {
+        try {
+          await discordRequest(`/channels/${order.discord_channel_id}`, {
+            method: "PATCH",
+            body: JSON.stringify({
+              name: `🟢・pedido-${order.order_number}`
+            })
+          });
+
+          await discordRequest(`/channels/${order.discord_channel_id}/messages`, {
+            method: "POST",
+            body: JSON.stringify({
+              embeds: [{
+                title: `🟢 PAGAMENTO CONFIRMADO • PEDIDO #${order.order_number}`,
+                description: "O pagamento foi confirmado pelo Asaas.",
+                color: 0x57f287,
+                fields: [
+                  { name: "💵 Valor pago", value: `**R$ ${Number(order.total_price).toFixed(2).replace(".", ",")}**`, inline: true },
+                  { name: "📌 Status", value: "**🟢 PAGO**", inline: true }
+                ],
+                footer: { text: "SPACE Rewards • Pagamento confirmado" }
+              }]
+            })
+          });
+        } catch (error) {
+          console.error("Discord paid channel update error:", error);
+          await sb.from("order_events").insert({
+            order_id: order.id,
+            event_type: "payment_channel_update_failed",
+            description: "Pagamento confirmado, mas não foi possível atualizar o canal do pedido.",
+            metadata: { error: String(error) }
+          });
+        }
+      }
 
       // Notifica o comprador por DM. Falha no Discord não invalida o webhook.
       try {
@@ -160,6 +223,34 @@ export async function POST(req: NextRequest) {
   if (event === "PAYMENT_OVERDUE") {
     if (order.status === "awaiting_payment" || order.status === "payment_pending") {
       await sb.from("orders").update({ status: "expired" }).eq("id", order.id);
+
+      if (order.discord_channel_id) {
+        try {
+          await discordRequest(`/channels/${order.discord_channel_id}`, {
+            method: "PATCH",
+            body: JSON.stringify({
+              name: `🔴・pedido-${order.order_number}`
+            })
+          });
+
+          await discordRequest(`/channels/${order.discord_channel_id}/messages`, {
+            method: "POST",
+            body: JSON.stringify({
+              embeds: [{
+                title: `🔴 PEDIDO VENCIDO • #${order.order_number}`,
+                description: "O prazo do pagamento terminou. Gere um novo pedido para comprar novamente.",
+                color: 0xed4245,
+                fields: [
+                  { name: "📌 Status", value: "**🔴 VENCIDO**", inline: true }
+                ],
+                footer: { text: "SPACE Rewards • Pagamento expirado" }
+              }]
+            })
+          });
+        } catch (error) {
+          console.error("Discord expired channel update error:", error);
+        }
+      }
     }
   }
 
