@@ -490,6 +490,42 @@ async function interactionResponse(body: any) {
   return NextResponse.json(body);
 }
 
+function discordInteractionFollowupUrl(interaction: any) {
+  const applicationId = interaction.application_id;
+  const token = interaction.token;
+  if (!applicationId || !token) throw new Error("Dados da interação do Discord ausentes.");
+  return "https://discord.com/api/v10/webhooks/" + applicationId + "/" + token;
+}
+
+function formatPixExpiration(value: any) {
+  if (!value) return "conforme cobrança";
+  const date = new Date(String(value));
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit", month: "2-digit", year: "numeric",
+    hour: "2-digit", minute: "2-digit"
+  });
+}
+
+async function sendQrFollowup(interaction: any, encodedImage: string) {
+  const base64 = String(encodedImage || "").replace(/^data:image\\/png;base64,/, "");
+  if (!base64) throw new Error("QR Code não retornado pelo Asaas.");
+  const binary = Buffer.from(base64, "base64");
+  const form = new FormData();
+  form.append("payload_json", JSON.stringify({
+    content: "📲 **QR Code PIX**\\nAponte a câmera do seu banco para o código abaixo.",
+    flags: 64,
+    attachments: [{ id: 0, filename: "pix-qrcode.png" }]
+  }));
+  form.append("files[0]", new Blob([binary], { type: "image/png" }), "pix-qrcode.png");
+  const response = await fetch(discordInteractionFollowupUrl(interaction), { method: "POST", body: form });
+  if (!response.ok) {
+    const details = await response.text();
+    throw new Error("Discord QR followup " + response.status + ": " + details);
+  }
+}
+
 
 async function asaasRequest(path: string, init: RequestInit = {}) {
   const apiKey = process.env.ASAAS_API_KEY;
@@ -1176,6 +1212,46 @@ export async function POST(req: NextRequest) {
     ));
   }
 
+  if (customId.startsWith("space_copy_pix:") || customId.startsWith("space_qr_pix:")) {
+    const orderId = customId.split(":")[1];
+    if (!orderId) return interactionResponse(ephemeral("❌ Pedido inválido."));
+
+    const sb = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+    const { data: order } = await sb.from("orders")
+      .select("id,order_number,status,payment_id,user_id,discord_channel_id")
+      .eq("id", orderId).single();
+
+    if (!order || order.discord_channel_id !== interaction.channel_id) {
+      return interactionResponse(ephemeral("❌ Este pagamento só pode ser acessado no canal do próprio pedido."));
+    }
+    const { data: owner } = await sb.from("users").select("discord_id").eq("id", order.user_id).single();
+    if (owner?.discord_id !== userId) return interactionResponse(ephemeral("❌ Apenas o comprador pode acessar o PIX."));
+    if (!order.payment_id || !["payment_pending","awaiting_payment"].includes(order.status)) {
+      return interactionResponse(ephemeral("❌ Este pagamento não está mais disponível."));
+    }
+
+    try {
+      const pix = await asaasRequest("/payments/" + order.payment_id + "/pixQrCode", { method: "GET" });
+      if (customId.startsWith("space_copy_pix:")) {
+        return interactionResponse(ephemeral("📋 **PIX COPIA E COLA**\n\n```\n" + String(pix.payload || "Não disponível") + "\n```\n\nSelecione o código acima para copiar."));
+      }
+      const response = interactionResponse({ type: 5, data: { flags: 64 } });
+      try {
+        await sendQrFollowup(interaction, String(pix.encodedImage || ""));
+      } catch (error) {
+        console.error("QR Code followup error:", error);
+        await fetch(discordInteractionFollowupUrl(interaction), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content: "❌ Não consegui gerar o QR Code agora. Use o botão **COPIAR PIX**.", flags: 64 })
+        }).catch(() => {});
+      }
+      return response;
+    } catch (error) {
+      console.error("PIX button error:", error);
+      return interactionResponse(ephemeral("❌ Não consegui recuperar o PIX agora. Tente novamente."));
+    }
+  }
   if (customId.startsWith("space_cpf_submit:")) {
     const orderId = customId.slice("space_cpf_submit:".length);
     const cpf = normalizeCpf(getModalValue(data, "cpf"));
@@ -1283,50 +1359,28 @@ export async function POST(req: NextRequest) {
         { method: "GET" }
       );
 
-      const lines = [
-        `💳 **PAGAMENTO DO PEDIDO #${order.order_number}**`,
-        "",
-        `💵 Valor: **${money(Number(order.total_price))}**`,
-        `🪙 Robux: **${Number(order.robux_amount).toLocaleString("pt-BR")}**`,
-        "",
-        "📲 **PIX COPIA E COLA:**",
-        "```",
-        String(pix.payload || "Não disponível"),
-        "```",
-        "",
-        `⏳ Expira em: **${pix.expirationDate || "conforme cobrança"}**`,
-        "",
-        "Após o pagamento, o sistema atualizará o pedido automaticamente."
-      ].join("\n");
-
-      const components: any[] = [];
-      if (payment?.invoiceUrl) {
-        components.push({
-          type: 1,
-          components: [
-            {
-              type: 2,
-              style: 5,
-              label: "ABRIR PAGAMENTO",
-              url: payment.invoiceUrl
-            }
-          ]
-        });
-      }
+      const pixPayload = String(pix.payload || "");
+      const expiration = formatPixExpiration(pix.expirationDate);
 
       return interactionResponse(
         publicMessage(
           "",
-          components,
           [{
-            title: `🟡 PAGAMENTO • PEDIDO #${order.order_number}`,
-            description: "Use o PIX abaixo para concluir o pagamento. O status mudará automaticamente quando o Asaas confirmar.",
+            type: 1,
+            components: [
+              button("space_copy_pix:" + order.id, "COPIAR PIX", "📋", 1),
+              button("space_qr_pix:" + order.id, "GERAR QR CODE", "📲", 2)
+            ]
+          }],
+          [{
+            title: "🟡 PAGAMENTO • PEDIDO #" + order.order_number,
+            description: "Pague via PIX. O pagamento será confirmado automaticamente pelo Asaas.",
             color: 0xfee75c,
             fields: [
-              { name: "💵 Valor", value: `**${money(Number(order.total_price))}**`, inline: true },
-              { name: "🪙 Robux", value: `**${Number(order.robux_amount).toLocaleString("pt-BR")}**`, inline: true },
-              { name: "📲 PIX COPIA E COLA", value: "```" + String(pix.payload || "Não disponível") + "```", inline: false },
-              { name: "⏳ Expira em", value: String(pix.expirationDate || "conforme cobrança"), inline: false }
+              { name: "💵 Valor", value: "**" + money(Number(order.total_price)) + "**", inline: true },
+              { name: "🪙 Robux", value: "**" + Number(order.robux_amount).toLocaleString("pt-BR") + "**", inline: true },
+              { name: "📲 PIX COPIA E COLA", value: pixPayload ? "```" + pixPayload + "```" : "Não disponível", inline: false },
+              { name: "⏳ Expira em", value: "**" + expiration + "**", inline: false }
             ],
             footer: { text: "🟡 Aberto • Aguardando pagamento" }
           }]
