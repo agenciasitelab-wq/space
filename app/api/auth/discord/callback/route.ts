@@ -10,11 +10,13 @@ export async function GET(req:NextRequest){
   const redirect=process.env.DISCORD_REDIRECT_URI||"https://space-gamma-blue.vercel.app/api/auth/discord/callback";
   const botToken=process.env.DISCORD_BOT_TOKEN;
   const guildId=process.env.DISCORD_GUILD_ID;
-  const memberRoleId=process.env.DISCORD_MEMBER_ROLE_ID;
+  const memberRoleId="1551628893637578872";
+  const defaultRoleId="1551635028285587456";
+  const travelerRoleId="1551628937837158531";
 
   if(!cid||!secret)return NextResponse.json({error:"OAuth não configurado no servidor"},{status:500});
-  if(!botToken||!guildId||!memberRoleId){
-    return NextResponse.json({error:"Configuração do cargo SPACE MEMBER ausente no servidor"},{status:500});
+  if(!botToken||!guildId){
+    return NextResponse.json({error:"Configuração do bot ausente no servidor"},{status:500});
   }
 
   const token=await fetch("https://discord.com/api/oauth2/token",{
@@ -50,25 +52,45 @@ export async function GET(req:NextRequest){
 
   if(error)return NextResponse.json({error:"Falha ao salvar verificação"},{status:500});
 
-  const roleResponse=await fetch(
-    `https://discord.com/api/v10/guilds/${guildId}/members/${u.id}/roles/${memberRoleId}`,
-    {
-      method:"PUT",
-      headers:{
-        Authorization:`Bot ${botToken}`,
-        "Content-Length":"0"
-      }
-    }
-  );
+  const headers={Authorization:`Bot ${botToken}`};
 
-  if(!roleResponse.ok){
-    const details=await roleResponse.text();
-    console.error("Falha ao atribuir SPACE MEMBER:",roleResponse.status,details);
+  const addRole=async(roleId:string)=>{
+    const response=await fetch(
+      `https://discord.com/api/v10/guilds/${guildId}/members/${u.id}/roles/${roleId}`,
+      {method:"PUT",headers:{...headers,"Content-Length":"0"}}
+    );
+    if(!response.ok){
+      const details=await response.text();
+      console.error("Falha ao adicionar cargo:",roleId,response.status,details);
+    }
+    return response;
+  };
+
+  const removeRole=async(roleId:string)=>{
+    const response=await fetch(
+      `https://discord.com/api/v10/guilds/${guildId}/members/${u.id}/roles/${roleId}`,
+      {method:"DELETE",headers}
+    );
+    if(!response.ok && response.status!==404){
+      const details=await response.text();
+      console.error("Falha ao remover cargo:",roleId,response.status,details);
+    }
+    return response;
+  };
+
+  const [memberResponse,defaultResponse]=await Promise.all([
+    addRole(memberRoleId),
+    addRole(defaultRoleId)
+  ]);
+
+  if(!memberResponse.ok || !defaultResponse.ok){
     return NextResponse.json({
-      error:"Conta verificada, mas não foi possível atribuir o cargo SPACE MEMBER.",
-      discord_status:roleResponse.status
+      error:"Conta verificada, mas não foi possível atribuir todos os cargos.",
+      discord_status:!memberResponse.ok?memberResponse.status:defaultResponse.status
     },{status:502});
   }
+
+  await removeRole(travelerRoleId);
 
   return NextResponse.redirect(new URL("/verificado",req.url));
 }
