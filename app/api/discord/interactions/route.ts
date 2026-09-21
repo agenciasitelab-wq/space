@@ -1097,6 +1097,38 @@ export async function POST(req: NextRequest) {
     if (existing) return interactionResponse(ephemeral("⭐ Você já avaliou este pedido. Obrigado!"));
 
     await sb.from("reviews").insert({ order_id: order.id, user_id: order.user_id, rating });
+
+    try {
+      const guildId = process.env.DISCORD_GUILD_ID;
+      if (guildId) {
+        const channels = await discordRequest(`/guilds/${guildId}/channels`, { method: "GET" });
+        const reviewsChannel = (channels as any[]).find((channel: any) =>
+          channel.type === 0 && channel.name === "⭐・avaliações"
+        );
+        const profile = await sb.from("users").select("discord_username,roblox_username").eq("id", order.user_id).single();
+        if (reviewsChannel) {
+          await discordRequest(`/channels/${reviewsChannel.id}/messages`, {
+            method: "POST",
+            body: JSON.stringify({
+              embeds: [{
+                title: `⭐ NOVA AVALIAÇÃO • PEDIDO #${order.order_number}`,
+                description: `**${"⭐".repeat(rating)}${"☆".repeat(5-rating)}**`,
+                color: 0xfee75c,
+                fields: [
+                  { name: "👤 Cliente", value: `<@${userId}>`, inline: true },
+                  { name: "🎮 Roblox", value: profile.data?.roblox_username || "Não informado", inline: true },
+                  { name: "📦 Pedido", value: `#${order.order_number}`, inline: true }
+                ],
+                footer: { text: "SPACE Rewards • Avaliação verificada" }
+              }]
+            })
+          });
+        }
+      }
+    } catch (error) {
+      console.error("Review publication error:", error);
+    }
+
     return interactionResponse(ephemeral(`⭐ Obrigado pela avaliação de **${rating}/5**!`));
   }
 
