@@ -213,9 +213,19 @@ async function interactionResponse(body: any) {
 async function asaasRequest(path: string, init: RequestInit = {}) {
   const apiKey = process.env.ASAAS_API_KEY;
   if (!apiKey) throw new Error("ASAAS_API_KEY não configurada");
-  const response = await fetch("https://api-sandbox.asaas.com/v3" + path, {
+  const baseUrl =
+    process.env.ASAAS_API_BASE_URL || "https://api-sandbox.asaas.com/v3";
+
+  const hasBody = init.body !== undefined && init.body !== null;
+
+  const response = await fetch(baseUrl + path, {
     ...init,
-    headers: { accept: "application/json", "content-type": "application/json", access_token: apiKey, ...(init.headers ?? {}) }
+    headers: {
+      accept: "application/json",
+      ...(hasBody ? { "content-type": "application/json" } : {}),
+      access_token: apiKey,
+      ...(init.headers ?? {})
+    }
   });
   const text = await response.text();
   let data: any = null;
@@ -600,7 +610,7 @@ export async function POST(req: NextRequest) {
 
     const sb = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
     const { data: order, error: orderError } = await sb.from("orders")
-      .select("id,order_number,total_price,status,robux_amount,roblox_username,user_id")
+      .select("id,order_number,total_price,status,payment_id,robux_amount,roblox_username,user_id")
       .eq("id", orderId).single();
     if (orderError || !order) return interactionResponse(ephemeral("❌ Pedido não encontrado."));
     if (order.status !== "awaiting_payment" && order.status !== "payment_pending") {
@@ -616,43 +626,89 @@ export async function POST(req: NextRequest) {
     if (!user.discord_email) return interactionResponse(ephemeral("❌ Sua conta não possui e-mail registrado. Refazer a verificação do Discord pode resolver isso."));
 
     try {
-      const customer = await asaasRequest("/customers", {
-        method: "POST",
-        body: JSON.stringify({
-          name: user.discord_username || ("SPACE " + userId),
-          cpfCnpj: cpf,
-          email: user.discord_email,
-          externalReference: "space-order-" + order.id,
-          notificationDisabled: false
-        })
-      });
+      let paymentId = order.payment_id as string | null;
+      let payment: any = null;
+      let customerId: string | null = null;
 
-      const payment = await asaasRequest("/payments", {
-        method: "POST",
-        body: JSON.stringify({
-          customer: customer.id,
-          billingType: "PIX",
-          value: Number(order.total_price),
-          dueDate: new Date().toISOString().slice(0, 10),
-          description: "SPACE Rewards — Pedido #" + order.order_number,
-          externalReference: order.id
-        })
-      });
+      // Se já existe uma cobrança criada, reutilizamos a mesma.
+      // Isso evita cobranças duplicadas quando a recuperação do QR Code falha.
+      if (paymentId) {
+        payment = await asaasRequest("/payments/" + paymentId, { method: "GET" });
+        customerId = payment?.customer ?? null;
 
-      const pix = await asaasRequest("/payments/" + payment.id + "/pixQrCode", { method: "GET" });
+        if (
+          payment?.status === "RECEIVED" ||
+          payment?.status === "CONFIRMED" ||
+          payment?.status === "RECEIVED_IN_CASH"
+        ) {
+          return interactionResponse(
+            ephemeral(
+              `✅ **O pagamento do pedido #${order.order_number} já foi confirmado.**\\n\\nO SPACE Rewards está processando seu pedido.`
+            )
+          );
+        }
+      } else {
+        // O Asaas permite clientes duplicados; procuramos pelo CPF antes de criar.
+        const customers = await asaasRequest(
+          "/customers?cpfCnpj=" + encodeURIComponent(cpf) + "&limit=1",
+          { method: "GET" }
+        );
 
-      await sb.from("orders").update({
-        status: "payment_pending",
-        payment_provider: "asaas",
-        payment_id: payment.id
-      }).eq("id", order.id);
+        let customer = customers?.data?.[0] ?? null;
 
-      await sb.from("order_events").insert({
-        order_id: order.id,
-        event_type: "payment_created",
-        description: "Cobrança PIX criada no Asaas.",
-        metadata: { provider: "asaas", payment_id: payment.id, customer_id: customer.id }
-      });
+        if (!customer) {
+          customer = await asaasRequest("/customers", {
+            method: "POST",
+            body: JSON.stringify({
+              name: user.discord_username || ("SPACE " + userId),
+              cpfCnpj: cpf,
+              email: user.discord_email,
+              externalReference: "space-user-" + user.id,
+              notificationDisabled: false
+            })
+          });
+        }
+
+        customerId = customer.id;
+
+        payment = await asaasRequest("/payments", {
+          method: "POST",
+          body: JSON.stringify({
+            customer: customer.id,
+            billingType: "PIX",
+            value: Number(order.total_price),
+            dueDate: new Date().toISOString().slice(0, 10),
+            description: "SPACE Rewards — Pedido #" + order.order_number,
+            externalReference: order.id
+          })
+        });
+
+        paymentId = payment.id;
+
+        // Persiste imediatamente o ID da cobrança.
+        // Se o QR Code falhar, o próximo clique recupera a mesma cobrança.
+        await sb.from("orders").update({
+          status: "payment_pending",
+          payment_provider: "asaas",
+          payment_id: payment.id
+        }).eq("id", order.id);
+
+        await sb.from("order_events").insert({
+          order_id: order.id,
+          event_type: "payment_created",
+          description: "Cobrança PIX criada no Asaas.",
+          metadata: {
+            provider: "asaas",
+            payment_id: payment.id,
+            customer_id: customer.id
+          }
+        });
+      }
+
+      const pix = await asaasRequest(
+        "/payments/" + paymentId + "/pixQrCode",
+        { method: "GET" }
+      );
 
       const lines = [
         `💳 **PAGAMENTO DO PEDIDO #${order.order_number}**`,
@@ -671,9 +727,20 @@ export async function POST(req: NextRequest) {
       ].join("\n");
 
       const components: any[] = [];
-      if (payment.invoiceUrl) {
-        components.push({ type: 1, components: [{ type: 2, style: 5, label: "ABRIR PAGAMENTO", url: payment.invoiceUrl }] });
+      if (payment?.invoiceUrl) {
+        components.push({
+          type: 1,
+          components: [
+            {
+              type: 2,
+              style: 5,
+              label: "ABRIR PAGAMENTO",
+              url: payment.invoiceUrl
+            }
+          ]
+        });
       }
+
       return interactionResponse(ephemeral(lines, components));
     } catch (error: any) {
       console.error("Asaas payment creation error:", error);
