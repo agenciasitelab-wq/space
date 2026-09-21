@@ -316,6 +316,19 @@ function methodLabel(method: DeliveryMethod) {
   }
 }
 
+function methodShortLabel(method: DeliveryMethod) {
+  switch (method) {
+    case "plus":
+      return "PLUS";
+    case "group":
+      return "GRUPO";
+    case "gamepass_fee":
+      return "GAMEPASS + TAXA";
+    case "gamepass_no_fee":
+      return "GAMEPASS SEM TAXA";
+  }
+}
+
 async function getDeliveryPricing(amount: number) {
   const sb = createClient(
     process.env.SUPABASE_URL!,
@@ -367,7 +380,7 @@ async function purchaseButtons(
       const received = receivedRobux(amount, deliveryMethod);
 
       return {
-        label: `${methodLabel(deliveryMethod).replace(/^\\S+\\s/, "")} • ${money(total)}`,
+        label: `${methodShortLabel(deliveryMethod)} • ${money(total)}`,
         value: deliveryMethod,
         description:
           deliveryMethod === "gamepass_no_fee"
