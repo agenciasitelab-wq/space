@@ -221,8 +221,20 @@ async function asaasRequest(path: string, init: RequestInit = {}) {
   let data: any = null;
   try { data = text ? JSON.parse(text) : null; } catch { data = { message: text }; }
   if (!response.ok) {
-    console.error("Asaas API error:", response.status, data);
-    throw new Error(data?.errors?.[0]?.description || data?.message || ("Asaas HTTP " + response.status));
+    console.error("Asaas API error:", {
+      path,
+      status: response.status,
+      data
+    });
+
+    const description =
+      data?.errors?.[0]?.description ||
+      data?.message ||
+      ("Asaas HTTP " + response.status);
+
+    throw new Error(
+      "Asaas " + response.status + " em " + path + ": " + description
+    );
   }
   return data;
 }
@@ -665,7 +677,25 @@ export async function POST(req: NextRequest) {
       return interactionResponse(ephemeral(lines, components));
     } catch (error: any) {
       console.error("Asaas payment creation error:", error);
-      return interactionResponse(ephemeral("❌ Não foi possível gerar o PIX agora. Verifique a configuração do Asaas Sandbox e tente novamente."));
+
+      const message = String(
+        error?.message || "Erro desconhecido ao comunicar com o Asaas."
+      ).slice(0, 1500);
+
+      return interactionResponse(
+        ephemeral(
+          [
+            "❌ **O Asaas recusou ou não conseguiu processar a solicitação.**",
+            "",
+            "🔎 **Detalhe técnico:**",
+            "```",
+            message,
+            "```",
+            "",
+            "Tente novamente após corrigirmos o erro indicado acima."
+          ].join("\n")
+        )
+      );
     }
   }
 
