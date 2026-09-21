@@ -1,0 +1,1 @@
+export default function Verify(){return <main className="shell"><section className="card"><div className="logo">🚀 SPACE REWARDS</div><h1 className="title">Verifique sua conta</h1><p className="muted">Conecte seu Discord para liberar sua conta SPACE Rewards.</p><a className="button" href="/api/auth/discord">🔐 Continuar com Discord</a></section></main>}
