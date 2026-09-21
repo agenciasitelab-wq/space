@@ -979,7 +979,7 @@ export async function POST(req: NextRequest) {
             fields: [
               { name: "💵 Valor", value: `**${money(Number(order.total_price))}**`, inline: true },
               { name: "🪙 Robux", value: `**${Number(order.robux_amount).toLocaleString("pt-BR")}**`, inline: true },
-              { name: "📲 PIX COPIA E COLA", value: `\\`\\`\\`\\n${String(pix.payload || "Não disponível")}\\n\\`\\`\\``, inline: false },
+              { name: "📲 PIX COPIA E COLA", value: "```" + String(pix.payload || "Não disponível") + "```", inline: false },
               { name: "⏳ Expira em", value: String(pix.expirationDate || "conforme cobrança"), inline: false }
             ],
             footer: { text: "🟡 Aberto • Aguardando pagamento" }
