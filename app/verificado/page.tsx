@@ -1,0 +1,1 @@
+export default function Verified(){return <main className="shell"><section className="card"><div className="logo">🚀 SPACE REWARDS</div><h1 className="title">Conta verificada ✅</h1><p className="muted">Sua conta Discord foi registrada com sucesso. O próximo passo é conectar a entrega automática ao bot.</p><a className="button" href="/">Voltar</a></section></main>}
