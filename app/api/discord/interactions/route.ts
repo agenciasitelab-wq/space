@@ -367,9 +367,14 @@ async function purchaseButtons(
       const received = receivedRobux(amount, deliveryMethod);
 
       return {
-        label: `${methodLabel(deliveryMethod)} • ${money(total)}`,
+        label: `${methodLabel(deliveryMethod).replace(/^\\S+\\s/, "")} • ${money(total)}`,
         value: deliveryMethod,
-        description: `Você recebe ${received.toLocaleString("pt-BR")} Robux`,
+        description:
+          deliveryMethod === "gamepass_no_fee"
+            ? `Recebe ${received.toLocaleString("pt-BR")} Robux • taxa do Roblox descontada`
+            : deliveryMethod === "gamepass_fee"
+              ? `Recebe ${received.toLocaleString("pt-BR")} Robux • taxa incluída`
+              : `Recebe ${received.toLocaleString("pt-BR")} Robux`,
         emoji: { name: deliveryMethod === "plus" ? "💎" : deliveryMethod === "group" ? "👥" : "🎮" },
         default: method === deliveryMethod
       };
