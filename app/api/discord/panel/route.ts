@@ -5,9 +5,15 @@ const CHANNEL_ID = "1551620868432601298";
 export async function POST(req: NextRequest) {
   const token = process.env.DISCORD_BOT_TOKEN;
   const configuredChannel = process.env.DISCORD_PURCHASE_CHANNEL_ID || CHANNEL_ID;
+  const authorization = req.headers.get("authorization");
 
   if (!token) {
     return NextResponse.json({ error: "Bot não configurado" }, { status: 500 });
+  }
+
+  // Esta rota publica o painel e não deve ficar aberta na internet.
+  if (authorization !== `Bearer ${token}`) {
+    return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   }
 
   const body = await req.json().catch(() => ({}));
