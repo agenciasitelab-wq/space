@@ -273,7 +273,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // 2) Quantidade -> painel de compra com botões
+  // 2) Quantidade -> resposta mínima de diagnóstico
   if (customId === "space_robux_amount") {
     const rawAmount = getModalValue(data, "robux_amount");
     const amount = Number(rawAmount);
@@ -296,8 +296,7 @@ export async function POST(req: NextRequest) {
 
     return interactionResponse(
       ephemeral(
-        purchaseSummary(amount),
-        purchaseButtons(amount)
+        `✅ Quantidade recebida: **${amount.toLocaleString("pt-BR")} Robux**`
       )
     );
   }
