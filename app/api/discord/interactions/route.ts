@@ -181,7 +181,7 @@ async function createPaymentChannel(
 
   const channels = await discordRequest(`/guilds/${guildId}/channels`, { method: "GET" });
   const ordersCategory = (channels as any[]).find(
-    (channel) => channel.type === 4 && channel.name === "💰・PEDIDOS"
+    (channel) => channel.type === 4 && channel.id === "1551698072189403186"
   );
 
   if (!ordersCategory) {
