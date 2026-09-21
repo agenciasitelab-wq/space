@@ -180,12 +180,12 @@ async function createPaymentChannel(
   if (!guildId) throw new Error("DISCORD_GUILD_ID não configurado");
 
   const channels = await discordRequest(`/guilds/${guildId}/channels`, { method: "GET" });
-  const supportCategory = (channels as any[]).find(
-    (channel) => channel.type === 4 && channel.name === "🎫・SUPORTE"
+  const ordersCategory = (channels as any[]).find(
+    (channel) => channel.type === 4 && channel.name === "💰・PEDIDOS"
   );
 
-  if (!supportCategory) {
-    throw new Error('Categoria "🎫・SUPORTE" não encontrada no servidor.');
+  if (!ordersCategory) {
+    throw new Error('Categoria "💰・PEDIDOS" não encontrada no servidor.');
   }
 
   const roles = await discordRequest(`/guilds/${guildId}/roles`, { method: "GET" });
@@ -235,7 +235,7 @@ async function createPaymentChannel(
     body: JSON.stringify({
       name: `🟡・pedido-${order.order_number}`,
       type: 0,
-      parent_id: supportCategory.id,
+      parent_id: ordersCategory.id,
       topic: `SPACE Rewards • Pedido #${order.order_number} • ${username}`,
       permission_overwrites
     })
