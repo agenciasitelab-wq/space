@@ -508,6 +508,15 @@ function formatPixExpiration(value: any) {
   });
 }
 
+async function acknowledgeInteraction(interaction: any, body: any) {
+  const response = await fetch(
+    "https://discord.com/api/v10/interactions/" + interaction.id + "/" + interaction.token + "/callback",
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
+  );
+  if (!response.ok && response.status !== 204) {
+    throw new Error("Discord interaction acknowledge " + response.status + ": " + await response.text());
+  }
+}
 async function sendQrFollowup(interaction: any, encodedImage: string) {
   const base64 = String(encodedImage || "").replace(/^data:image\\/png;base64,/, "");
   if (!base64) throw new Error("QR Code não retornado pelo Asaas.");
@@ -1307,12 +1316,17 @@ export async function POST(req: NextRequest) {
     }
 
     try {
-      const pix = await asaasRequest("/payments/" + order.payment_id + "/pixQrCode", { method: "GET" });
       if (customId.startsWith("space_copy_pix:")) {
+        const pix = await asaasRequest("/payments/" + order.payment_id + "/pixQrCode", { method: "GET" });
         return interactionResponse(ephemeral("📋 **PIX COPIA E COLA**\n\n```\n" + String(pix.payload || "Não disponível") + "\n```\n\nSelecione o código acima para copiar."));
       }
-      const response = interactionResponse({ type: 5, data: { flags: 64 } });
+
+      // QR pode demorar (Asaas + upload da imagem). Primeiro confirmamos a interação
+      // diretamente no callback do Discord para não deixar o botão expirar.
+      await acknowledgeInteraction(interaction, { type: 5, data: { flags: 64 } });
+
       try {
+        const pix = await asaasRequest("/payments/" + order.payment_id + "/pixQrCode", { method: "GET" });
         await sendQrFollowup(interaction, String(pix.encodedImage || ""));
       } catch (error) {
         console.error("QR Code followup error:", error);
@@ -1322,7 +1336,7 @@ export async function POST(req: NextRequest) {
           body: JSON.stringify({ content: "❌ Não consegui gerar o QR Code agora. Use o botão **COPIAR PIX**.", flags: 64 })
         }).catch(() => {});
       }
-      return response;
+      return NextResponse.json({ ok: true });
     } catch (error) {
       console.error("PIX button error:", error);
       return interactionResponse(ephemeral("❌ Não consegui recuperar o PIX agora. Tente novamente."));
