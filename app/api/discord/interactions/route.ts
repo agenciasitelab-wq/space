@@ -273,7 +273,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // 2) Quantidade -> teste controlado com um único botão
+  // 2) Quantidade -> teste com botão simples, sem emoji
   if (customId === "space_robux_amount") {
     const rawAmount = getModalValue(data, "robux_amount");
     const amount = Number(rawAmount);
@@ -296,8 +296,15 @@ export async function POST(req: NextRequest) {
 
     return interactionResponse(
       ephemeral(
-        `✅ Quantidade: **${amount.toLocaleString("pt-BR")} Robux**\\n\\nAgora clique em **USUÁRIO ROBLOX** para informar sua conta.`,
-        [[button(`space_set_username:${amount}:_`, "USUÁRIO ROBLOX", "🎮")]]
+        `✅ Quantidade: **${amount.toLocaleString("pt-BR")} Robux**`,
+        [[
+          {
+            type: 2,
+            style: 1,
+            label: "USUÁRIO ROBLOX",
+            custom_id: `space_set_username:${amount}:_`
+          }
+        ]]
       )
     );
   }
