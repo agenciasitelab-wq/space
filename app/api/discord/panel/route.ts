@@ -30,7 +30,8 @@ export async function POST(req: NextRequest) {
         "**Compre seus Robux de forma simples e segura.**\n\n" +
         "🪙 **Quantidade mínima:** 150 Robux\n" +
         "⚡ Entrega rápida\n" +
-        "🔒 Compra segura\n\n" +
+        "🔒 Compra segura\n" +
+        "🛡️ Nunca pedimos senha ou código de segurança\n\n" +
         "Clique no botão abaixo para começar sua compra.",
       color: 0x5865f2,
       footer: { text: "SPACE Rewards • Robux" }
