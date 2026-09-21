@@ -25,16 +25,43 @@ export async function POST(req: NextRequest) {
 
   const message = {
     embeds: [{
-      title: "🚀 SPACE REWARDS",
+      title: "🚀 COMPRAR ROBUX",
       description:
-        "**Compre seus Robux de forma simples e segura.**\n\n" +
-        "🪙 **Quantidade mínima:** 150 Robux\n" +
-        "⚡ Entrega rápida\n" +
-        "🔒 Compra segura\n" +
-        "🛡️ Nunca pedimos senha ou código de segurança\n\n" +
-        "Clique no botão abaixo para começar sua compra.",
-      color: 0x5865f2,
-      footer: { text: "SPACE Rewards • Robux" }
+        "**Rápido, seguro e sem complicação.**\n" +
+        "Escolha a quantidade que deseja, selecione a forma de envio e finalize seu pagamento pelo PIX.\n\n" +
+        "⚡ **Entrega rápida**\n" +
+        "🔒 **Compra segura**\n" +
+        "📦 **Diversas formas de envio**\n" +
+        "🎫 **Suporte durante o pedido**\n\n" +
+        "### 🛒 Como funciona?\n" +
+        "1️⃣ Escolha a quantidade de Robux\n" +
+        "2️⃣ Selecione a forma de envio\n" +
+        "3️⃣ Informe seu usuário do Roblox\n" +
+        "4️⃣ Confira o valor e conclua o pedido\n" +
+        "5️⃣ Realize o pagamento via PIX\n\n" +
+        "🪙 **Mínimo:** 150 Robux\n" +
+        "🪙 **Máximo:** 1.000.000 Robux\n\n" +
+        "🛡️ **Segurança**\n" +
+        "Nunca pedimos sua senha do Roblox, códigos de segurança ou acesso à sua conta.",
+      color: 0x8b5cf6,
+      fields: [
+        {
+          name: "💎 Formas de envio",
+          value: "Plus • Grupo • Gamepass + taxa • Gamepass sem taxa",
+          inline: false
+        },
+        {
+          name: "💳 Pagamento",
+          value: "PIX com confirmação automática pelo sistema.",
+          inline: true
+        },
+        {
+          name: "🎫 Precisa de ajuda?",
+          value: "Nossa equipe está disponível pelo suporte.",
+          inline: true
+        }
+      ],
+      footer: { text: "SPACE Rewards • Compra de Robux" }
     }],
     components: [{
       type: 1,
