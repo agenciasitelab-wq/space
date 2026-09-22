@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "crypto";
 
-export type PublisherSession = { userId: string; username: string; exp: number };
+type PublisherSession = { userId: string; username: string; exp: number };
 
 const secret = () => process.env.DISCORD_CLIENT_SECRET || process.env.DISCORD_PUBLIC_KEY || "";
 
@@ -26,23 +26,3 @@ export function verifyPublisherSession(token: string | undefined): PublisherSess
 }
 
 export const PUBLISHER_COOKIE = "space_publisher";
-
-export const PUBLISHER_ROLES = [
-  "1551628937837158531", // SPACE TRAVELER
-  "1551628893637578872", // SPACE MEMBER
-  "1551635028285587456", // MEMBROS PADRÃO
-];
-
-export const STAFF_PUBLISHER_ROLES = [
-  "1551628937837158531",
-  "1551628893637578872",
-  "1551635028285587456",
-  "1551635518976950302",
-];
-
-export const ADMIN_PUBLISHER_ROLES = [
-  "1551628937837158531",
-  "1551628893637578872",
-  "1551635028285587456",
-  "1551635518976950302",
-];
