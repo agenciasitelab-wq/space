@@ -65,9 +65,9 @@ export async function GET(req:NextRequest){
     const roles = await rolesResponse.json();
     const roleIds = new Set<string>(memberData.roles || []);
     const canPublish = roles.some((role:any) => roleIds.has(role.id) && (
-      (BigInt(role.permissions || "0") & 8n) !== 0n ||
-      (BigInt(role.permissions || "0") & 32n) !== 0n ||
-      (BigInt(role.permissions || "0") & 8192n) !== 0n
+      (BigInt(role.permissions || "0") & BigInt("8")) !== BigInt("0") ||
+      (BigInt(role.permissions || "0") & BigInt("32")) !== BigInt("0") ||
+      (BigInt(role.permissions || "0") & BigInt("8192")) !== BigInt("0")
     ));
     if (!canPublish) return NextResponse.json({error:"Sua conta não possui permissão para publicar no Discord."},{status:403});
 
