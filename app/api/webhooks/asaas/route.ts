@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
 
   const { data: order, error: orderError } = await sb
     .from("orders")
-    .select("id,order_number,status,total_price,user_id,discord_channel_id")
+    .select("id,order_number,status,total_price,user_id,discord_channel_id,delivery_method,roblox_username")
     .eq("payment_id", paymentId)
     .maybeSingle();
 
@@ -113,7 +113,7 @@ export async function POST(req: NextRequest) {
           await discordRequest(`/channels/${order.discord_channel_id}`, {
             method: "PATCH",
             body: JSON.stringify({
-              name: `🟢・pedido-${order.order_number}`
+              name: (() => { const m = order.delivery_method === "plus" ? "plus" : order.delivery_method === "gamepass_fee" || order.delivery_method === "gamepass_no_fee" ? "gamepass" : "grupo"; const u = String(order.roblox_username || "cliente").toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 70) || "cliente"; return `🟢・${m}-${u}`; })()
             })
           });
 
@@ -288,7 +288,7 @@ export async function POST(req: NextRequest) {
           await discordRequest(`/channels/${order.discord_channel_id}`, {
             method: "PATCH",
             body: JSON.stringify({
-              name: `🔴・pedido-${order.order_number}`
+              name: (() => { const m = order.delivery_method === "plus" ? "plus" : order.delivery_method === "gamepass_fee" || order.delivery_method === "gamepass_no_fee" ? "gamepass" : "grupo"; const u = String(order.roblox_username || "cliente").toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 70) || "cliente"; return `🔴・${m}-${u}`; })()
             })
           });
 
