@@ -6,52 +6,36 @@ const BANNER_URL = "https://space-gamma-blue.vercel.app/space-rewards-banner.png
 
 function purchasePanel() {
   return {
-    banner: {
-      embeds: [{ image: { url: BANNER_URL } }]
-    },
-    panel: {
-      embeds: [{
-        title: "🛒 COMPRAR ROBUX",
-        description:
-          "**Rápido, seguro e sem complicação.**\n" +
-          "Escolha a quantidade, selecione a forma de envio e pague via PIX.\n\n" +
-          "⚡ **Entrega rápida**  •  🔒 **Compra segura**  •  🎫 **Suporte**\n\n" +
-          "**Como funciona**\n" +
-          "1️⃣ Escolha a quantidade\n" +
-          "2️⃣ Selecione a forma de envio\n" +
-          "3️⃣ Informe seu usuário do Roblox\n" +
-          "4️⃣ Confirme o pedido\n" +
-          "5️⃣ Pague via PIX\n\n" +
-          "🪙 **Mínimo:** 150 Robux  •  **Máximo:** 1.000.000 Robux\n" +
-          "🛡️ Nunca pedimos sua senha, códigos de segurança ou acesso à sua conta.",
-        color: 0x8b5cf6,
-        fields: [
-          {
-            name: "💎 Formas de envio",
-            value: "Plus • Gamepass + taxa • Gamepass sem taxa",
-            inline: false
-          },
-          {
-            name: "💳 Pagamento",
-            value: "PIX com confirmação automática.",
-            inline: true
-          },
-          {
-            name: "🎫 Suporte",
-            value: "Nossa equipe está disponível para ajudar.",
-            inline: true
-          }
-        ],
-        footer: { text: "SPACE Rewards • Compra de Robux" }
-      }],
-      components: [{
-        type: 1,
-        components: [
-          { type: 2, style: 1, label: "COMPRAR ROBUX", emoji: { name: "🛒" }, custom_id: "space_buy_robux" },
-          { type: 2, style: 2, label: "MEU PERFIL", emoji: { name: "👤" }, custom_id: "space_profile" }
-        ]
-      }]
-    }
+    embeds: [{
+      title: "🚀 COMPRAR ROBUX",
+      description:
+        "**Rápido, seguro e sem complicação.**\n" +
+        "Escolha a quantidade, selecione a forma de envio e finalize pelo PIX.\n\n" +
+        "━━━━━━━━━━━━━━━━━━━━\n\n" +
+        "🛒 **COMPRE AGORA**\n" +
+        "• Escolha a quantidade de Robux desejada\n" +
+        "• Selecione a forma de envio\n" +
+        "• Informe seu usuário do Roblox\n" +
+        "• Confira o valor e finalize o pedido\n\n" +
+        "━━━━━━━━━━━━━━━━━━━━\n\n" +
+        "💎 **Formas de envio**\n" +
+        "Plus • Gamepass + taxa • Gamepass sem taxa\n\n" +
+        "💳 **Pagamento**\n" +
+        "PIX com confirmação automática pelo sistema.\n\n" +
+        "🛡️ **Segurança**\n" +
+        "Nunca pedimos sua senha, códigos de segurança ou acesso à sua conta.\n\n" +
+        "🪙 **Mínimo:** 150 Robux  •  **Máximo:** 1.000.000 Robux",
+      color: 0x8b5cf6,
+      image: { url: BANNER_URL },
+      footer: { text: "SPACE Rewards • Compra de Robux" }
+    }],
+    components: [{
+      type: 1,
+      components: [
+        { type: 2, style: 1, label: "COMPRAR ROBUX", emoji: { name: "🛒" }, custom_id: "space_buy_robux" },
+        { type: 2, style: 2, label: "MEU PERFIL", emoji: { name: "👤" }, custom_id: "space_profile" }
+      ]
+    }]
   };
 }
 function announcement(title: string, content: string) {
