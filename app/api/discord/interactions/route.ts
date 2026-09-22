@@ -241,12 +241,53 @@ async function createPaymentChannel(
     })
   });
 
+  const avatarUrl = await getRobloxAvatar(order.roblox_user_id || "");
+
   await discordRequest(`/channels/${channel.id}/messages`, {
     method: "POST",
     body: JSON.stringify({
+      content: `<@${discordUserId}>`,
       embeds: [{
-        ...purchaseEmbed(amount, username, method, total, "🟡 ABERTO"),
-        title: `🟡 SPACE REWARDS • PEDIDO #${order.order_number}`
+        title: `🟡 PEDIDO #${order.order_number}`,
+        description:
+          "**Seu pedido foi aberto com sucesso.**\n" +
+          "Confira os dados abaixo e, quando estiver tudo certo, clique em **GERAR PIX** para continuar.\n\n" +
+          "🔒 **Canal privado:** somente você e a equipe autorizada têm acesso.",
+        color: 0xfee75c,
+        thumbnail: avatarUrl ? { url: avatarUrl } : undefined,
+        fields: [
+          {
+            name: "🪙 Robux",
+            value: `**${amount.toLocaleString("pt-BR")} Robux**`,
+            inline: true
+          },
+          {
+            name: "💵 Total",
+            value: `**${money(total)}**`,
+            inline: true
+          },
+          {
+            name: "🎮 Roblox",
+            value: `**${username}**`,
+            inline: true
+          },
+          {
+            name: "📦 Forma de envio",
+            value: `**${methodLabel(method)}**`,
+            inline: true
+          },
+          {
+            name: "📌 Status",
+            value: "**🟡 Aguardando pagamento**",
+            inline: true
+          },
+          {
+            name: "⚡ Próximo passo",
+            value: "Clique em **GERAR PIX**, informe o CPF do pagador e realize o pagamento.",
+            inline: false
+          }
+        ],
+        footer: { text: "SPACE Rewards • Pedido privado" }
       }],
       components: [{
         type: 1,
@@ -260,7 +301,6 @@ async function createPaymentChannel(
 
   return channel;
 }
-
 function money(value: number) {
   return value.toLocaleString("pt-BR", {
     style: "currency",
