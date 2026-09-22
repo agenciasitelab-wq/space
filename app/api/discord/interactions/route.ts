@@ -1264,8 +1264,19 @@ export async function POST(req: NextRequest) {
     if (!Number.isInteger(rating) || rating < 1 || rating > 5) return interactionResponse(ephemeral("❌ Avaliação inválida."));
 
     const sb = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
-    const { data: order } = await sb.from("orders").select("id,user_id,status,order_number").eq("id", orderId).single();
-    if (!order || order.status !== "delivered") return interactionResponse(ephemeral("❌ Este pedido ainda não está disponível para avaliação."));
+    const { data: order } = await sb.from("orders")
+      .select("id,user_id,status,order_number,delivered_at")
+      .eq("id", orderId)
+      .single();
+    if (!order || order.status !== "delivered") {
+      return interactionResponse(ephemeral("❌ Este pedido ainda não está disponível para avaliação."));
+    }
+
+    // A avaliação fica disponível por exatamente 5 minutos após a entrega.
+    const deliveredAt = order.delivered_at ? new Date(String(order.delivered_at)).getTime() : 0;
+    if (!deliveredAt || Date.now() - deliveredAt > 5 * 60 * 1000) {
+      return interactionResponse(ephemeral("⏰ O prazo de 5 minutos para avaliar este pedido terminou."));
+    }
     const { data: owner } = await sb.from("users").select("id,discord_id").eq("id", order.user_id).single();
     if (owner?.discord_id !== userId) return interactionResponse(ephemeral("❌ Apenas o comprador pode avaliar este pedido."));
 
