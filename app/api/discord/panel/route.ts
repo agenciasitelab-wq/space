@@ -24,31 +24,28 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Canal inválido" }, { status: 400 });
   }
 
-  const banner = {
-    embeds: [{ image: { url: BANNER_URL } }]
-  };
-
   const message = {
     embeds: [{
-      title: "🛒 COMPRAR ROBUX",
+      title: "🚀 COMPRAR ROBUX",
       description:
         "**Rápido, seguro e sem complicação.**\n" +
-        "Escolha a quantidade, selecione a forma de envio e pague via PIX.\n\n" +
-        "⚡ **Entrega rápida**  •  🔒 **Compra segura**  •  🎫 **Suporte**\n\n" +
-        "**Como funciona**\n" +
-        "1️⃣ Escolha a quantidade\n" +
-        "2️⃣ Selecione a forma de envio\n" +
-        "3️⃣ Informe seu usuário do Roblox\n" +
-        "4️⃣ Confirme o pedido\n" +
-        "5️⃣ Pague via PIX\n\n" +
-        "🪙 **Mínimo:** 150 Robux  •  **Máximo:** 1.000.000 Robux\n" +
-        "🛡️ Nunca pedimos sua senha, códigos de segurança ou acesso à sua conta.",
+        "Escolha a quantidade, selecione a forma de envio e finalize pelo PIX.\n\n" +
+        "━━━━━━━━━━━━━━━━━━━━\n\n" +
+        "🛒 **COMPRE AGORA**\n" +
+        "• Escolha a quantidade de Robux desejada\n" +
+        "• Selecione a forma de envio\n" +
+        "• Informe seu usuário do Roblox\n" +
+        "• Confira o valor e finalize o pedido\n\n" +
+        "━━━━━━━━━━━━━━━━━━━━\n\n" +
+        "💎 **Formas de envio**\n" +
+        "Plus • Gamepass + taxa • Gamepass sem taxa\n\n" +
+        "💳 **Pagamento**\n" +
+        "PIX com confirmação automática pelo sistema.\n\n" +
+        "🛡️ **Segurança**\n" +
+        "Nunca pedimos sua senha, códigos de segurança ou acesso à sua conta.\n\n" +
+        "🪙 **Mínimo:** 150 Robux  •  **Máximo:** 1.000.000 Robux",
       color: 0x8b5cf6,
-      fields: [
-        { name: "💎 Formas de envio", value: "Plus • Gamepass + taxa • Gamepass sem taxa", inline: false },
-        { name: "💳 Pagamento", value: "PIX com confirmação automática.", inline: true },
-        { name: "🎫 Suporte", value: "Nossa equipe está disponível para ajudar.", inline: true }
-      ],
+      image: { url: BANNER_URL },
       footer: { text: "SPACE Rewards • Compra de Robux" }
     }],
     components: [{
@@ -59,27 +56,6 @@ export async function POST(req: NextRequest) {
       ]
     }]
   };
-
-  const bannerResponse = await fetch(
-    `https://discord.com/api/v10/channels/${channelId}/messages`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bot ${token}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(banner)
-    }
-  );
-
-  if (!bannerResponse.ok) {
-    const bannerData = await bannerResponse.json().catch(() => ({}));
-    console.error("Discord banner error:", bannerResponse.status, bannerData);
-    return NextResponse.json(
-      { error: "Não foi possível publicar o banner", details: bannerData },
-      { status: bannerResponse.status }
-    );
-  }
 
   const response = await fetch(
     `https://discord.com/api/v10/channels/${channelId}/messages`,
