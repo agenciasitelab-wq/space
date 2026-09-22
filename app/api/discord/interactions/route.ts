@@ -233,7 +233,7 @@ async function createPaymentChannel(
   const channel = await discordRequest(`/guilds/${guildId}/channels`, {
     method: "POST",
     body: JSON.stringify({
-      name: `🟡・pedido-${order.order_number}`,
+      name: orderChannelName("open", method, username),
       type: 0,
       parent_id: ordersCategory.id,
       topic: `SPACE Rewards • Pedido #${order.order_number} • ${username}`,
@@ -341,6 +341,27 @@ function normalizeMethod(value: string): DeliveryMethod | null {
   }
 
   return null;
+}
+
+function orderChannelName(status: "open" | "paid" | "delivered" | "cancelled", method: DeliveryMethod, username: string) {
+  const statusIcon = {
+    open: "🟡",
+    paid: "🟢",
+    delivered: "🟣",
+    cancelled: "🔴"
+  }[status];
+
+  const methodName =
+    method === "plus" ? "plus" :
+    method === "gamepass_fee" || method === "gamepass_no_fee" ? "gamepass" :
+    "grupo";
+
+  const safeUsername = username
+    .toLowerCase()
+    .replace(/[^a-z0-9_]/g, "")
+    .slice(0, 70) || "cliente";
+
+  return `${statusIcon}・${methodName}-${safeUsername}`;
 }
 
 function methodLabel(method: DeliveryMethod) {
@@ -1121,7 +1142,7 @@ export async function POST(req: NextRequest) {
         try {
           await discordRequest(`/channels/${channelId}`, {
             method: "PATCH",
-            body: JSON.stringify({ name: `🔴・pedido-cancelado-${order.id.slice(0, 6)}` })
+            body: JSON.stringify({ name: orderChannelName("cancelled", order.delivery_method, order.roblox_username) })
           });
         } catch (error) {
           console.error("Cancel channel rename error:", error);
@@ -1218,7 +1239,7 @@ export async function POST(req: NextRequest) {
       try {
         await discordRequest(`/channels/${order.discord_channel_id}`, {
           method: "PATCH",
-          body: JSON.stringify({ name: `🟣・pedido-${order.order_number}` })
+          body: JSON.stringify({ name: orderChannelName("delivered", order.delivery_method, order.roblox_username) })
         });
         await discordRequest(`/channels/${order.discord_channel_id}/messages`, {
           method: "POST",
