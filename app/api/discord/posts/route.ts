@@ -38,6 +38,27 @@ function purchasePanel() {
     }]
   };
 }
+function calculatorPanel() {
+  return {
+    embeds: [{
+      title: "🧮 CALCULADORA DE ROBUX",
+      description:
+        "**Descubra o valor dos seus Robux em segundos.**\n" +
+        "Clique no botão abaixo, informe a quantidade e o SPACE Rewards gera uma imagem com os valores atuais.\n\n" +
+        "🪙 **Mínimo:** 50 Robux\n" +
+        "🪙 **Máximo:** 1.000.000 Robux",
+      color: 0x8b5cf6,
+      footer: { text: "SPACE Rewards • Calculadora de Robux" }
+    }],
+    components: [{
+      type: 1,
+      components: [
+        { type: 2, style: 1, label: "CALCULAR ROBUX", emoji: { name: "🧮" }, custom_id: "space_calculator" }
+      ]
+    }]
+  };
+}
+
 function announcement(title: string, content: string) {
   return { embeds: [{ title: title || "📢 ANÚNCIO", description: content, color: 0x8b5cf6, footer: { text: "SPACE Rewards • Anúncios" } }] };
 }
@@ -58,12 +79,13 @@ export async function POST(req: NextRequest) {
   const template = body.template;
   const channelId = body.channelId || DEFAULT_CHANNEL;
 
-  if (!["purchase_panel", "announcement", "rules", "giveaway", "custom"].includes(template)) {
+  if (!["purchase_panel", "calculator", "announcement", "rules", "giveaway", "custom"].includes(template)) {
     return NextResponse.json({ error: "Modelo de postagem inválido." }, { status: 400 });
   }
 
   let message: any;
   if (template === "purchase_panel") message = purchasePanel();
+  else if (template === "calculator") message = calculatorPanel();
   else if (template === "announcement") message = announcement(body.title, body.content);
   else if (template === "rules") message = rules(body.content);
   else if (template === "giveaway") message = giveaway(body.content);
