@@ -36,6 +36,7 @@ export default function Publisher() {
     <label>Modelo</label>
     <select value={template} onChange={e=>setTemplate(e.target.value)} style={{width:"100%",padding:12,margin:"8px 0 16px"}}>
       <option value="purchase_panel">🛒 Painel de compra de Robux</option>
+      <option value="calculator">🧮 Calculadora de Robux</option>
       <option value="announcement">📢 Anúncio</option>
       <option value="rules">📜 Regras</option>
       <option value="giveaway">🎁 Giveaway</option>
@@ -45,7 +46,7 @@ export default function Publisher() {
     <label>ID do canal do Discord</label>
     <input value={channelId} onChange={e=>setChannelId(e.target.value)} placeholder="Ex.: 1551620868432601298" style={{width:"100%",padding:12,margin:"8px 0 16px"}}/>
 
-    {template !== "purchase_panel" && <><label>Título</label><input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Título da postagem" style={{width:"100%",padding:12,margin:"8px 0 16px"}}/><label>Conteúdo</label><textarea value={content} onChange={e=>setContent(e.target.value)} placeholder="Escreva a mensagem..." rows={8} style={{width:"100%",padding:12,margin:"8px 0 16px"}}/></>}
+    {template !== "purchase_panel" && template !== "calculator" && <><label>Título</label><input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Título da postagem" style={{width:"100%",padding:12,margin:"8px 0 16px"}}/><label>Conteúdo</label><textarea value={content} onChange={e=>setContent(e.target.value)} placeholder="Escreva a mensagem..." rows={8} style={{width:"100%",padding:12,margin:"8px 0 16px"}}/></>}
 
     <button className="button" onClick={publish}>🚀 Publicar no Discord</button>
     {status && <p className="muted" style={{marginTop:16}}>{status}</p>}
