@@ -420,7 +420,6 @@ async function purchaseButtons(
 
   const methodOrder: DeliveryMethod[] = [
     "plus",
-    "group",
     "gamepass_fee",
     "gamepass_no_fee"
   ];
