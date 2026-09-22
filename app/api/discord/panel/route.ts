@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const CHANNEL_ID = "1551620868432601298";
+const BANNER_URL = "https://space-gamma-blue.vercel.app/space-rewards-banner.png";
 
 export async function POST(req: NextRequest) {
   const token = process.env.DISCORD_BOT_TOKEN;
@@ -44,10 +45,11 @@ export async function POST(req: NextRequest) {
         "🛡️ **Segurança**\n" +
         "Nunca pedimos sua senha do Roblox, códigos de segurança ou acesso à sua conta.",
       color: 0x8b5cf6,
+      image: { url: BANNER_URL },
       fields: [
         {
           name: "💎 Formas de envio",
-          value: "Plus • Grupo • Gamepass + taxa • Gamepass sem taxa",
+          value: "Plus • Gamepass + taxa • Gamepass sem taxa",
           inline: false
         },
         {
