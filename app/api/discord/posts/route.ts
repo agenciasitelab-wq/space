@@ -72,18 +72,7 @@ export async function POST(req: NextRequest) {
   const token = process.env.DISCORD_BOT_TOKEN;
   if (!token) return NextResponse.json({ error: "Bot não configurado." }, { status: 500 });
 
-  if (template === "purchase_panel") {
-    const bannerResponse = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
-      method: "POST",
-      headers: { Authorization: `Bot ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify(message.banner)
-    });
-    if (!bannerResponse.ok) {
-      const bannerData = await bannerResponse.json().catch(() => ({}));
-      console.error("Discord banner error:", bannerResponse.status, bannerData);
-      return NextResponse.json({ error: "Não foi possível publicar o banner.", details: bannerData }, { status: bannerResponse.status });
-    }
-  }
+
 
   const response = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
     method: "POST",
