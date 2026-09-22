@@ -1,5 +1,5 @@
 import {NextRequest,NextResponse} from "next/server";
-import { signPublisherSession, PUBLISHER_COOKIE } from "@/lib/discord/publisher";
+import { signPublisherSession, PUBLISHER_COOKIE } from "../../../../../../lib/discord/publisher";
 import {createClient} from "@supabase/supabase-js";
 
 export async function GET(req:NextRequest){
