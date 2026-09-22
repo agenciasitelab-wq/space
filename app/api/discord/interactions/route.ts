@@ -708,6 +708,61 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // 1.5) Calculadora de Robux
+  if (customId === "space_calculator") {
+    return interactionResponse(
+      modal(
+        "space_calculator_amount",
+        "Calculadora de Robux",
+        "calculator_amount",
+        "Quantidade de Robux",
+        "Ex.: 50, 500, 1000",
+        10
+      )
+    );
+  }
+
+  if (customId === "space_calculator_amount") {
+    const rawAmount = getModalValue(data, "calculator_amount");
+    const amount = Number(rawAmount);
+
+    if (!Number.isInteger(amount) || amount < 50) {
+      return interactionResponse(
+        ephemeral("❌ Informe uma quantidade inteira de pelo menos **50 Robux**.")
+      );
+    }
+
+    if (amount > MAX_ROBUX) {
+      return interactionResponse(
+        ephemeral("❌ Para valores acima de 1.000.000 Robux, fale com o suporte.")
+      );
+    }
+
+    const imageUrl =
+      "https://space-gamma-blue.vercel.app/api/discord/calculator/image?amount=" +
+      encodeURIComponent(String(amount));
+
+    return interactionResponse(
+      publicMessage(
+        "",
+        [{
+          type: 1,
+          components: [
+            button("space_calculator", "CALCULAR OUTRO VALOR", "🧮")
+          ]
+        }],
+        [{
+          title: "🧮 CALCULADORA DE ROBUX",
+          description:
+            `Confira os valores estimados para **${amount.toLocaleString("pt-BR")} Robux**.`,
+          color: 0x8b5cf6,
+          image: { url: imageUrl },
+          footer: { text: "SPACE Rewards • Valores conforme a tabela atual" }
+        }]
+      )
+    );
+  }
+
   // 2) Quantidade -> teste com botão simples, sem emoji
   if (customId === "space_robux_amount") {
     const rawAmount = getModalValue(data, "robux_amount");
