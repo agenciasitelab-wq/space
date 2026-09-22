@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PUBLISHER_COOKIE, verifyPublisherSession } from "@/lib/discord/publisher";
+import { PUBLISHER_COOKIE, verifyPublisherSession } from "../../../../../../lib/discord/publisher";
 
 const DEFAULT_CHANNEL = "1551620868432601298";
 const BANNER_URL = "https://space-gamma-blue.vercel.app/space-rewards-banner.png";
