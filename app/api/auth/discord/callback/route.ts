@@ -1,4 +1,5 @@
 import {NextRequest,NextResponse} from "next/server";
+import { signPublisherSession, PUBLISHER_COOKIE } from "@/lib/discord/publisher";
 import {createClient} from "@supabase/supabase-js";
 
 export async function GET(req:NextRequest){
@@ -53,6 +54,38 @@ export async function GET(req:NextRequest){
   if(error)return NextResponse.json({error:"Falha ao salvar verificação"},{status:500});
 
   const headers={Authorization:`Bot ${botToken}`};
+
+  // Modo publicador: somente quem possui permissão administrativa/moderação no servidor.
+  if (req.nextUrl.searchParams.get("state") === "publisher") {
+    const member = await fetch(`https://discord.com/api/v10/guilds/${guildId}/members/${u.id}`, { headers });
+    if (!member.ok) return NextResponse.json({error:"Você não é membro do servidor SPACE Rewards."},{status:403});
+    const memberData = await member.json();
+    const rolesResponse = await fetch(`https://discord.com/api/v10/guilds/${guildId}/roles`, { headers });
+    if (!rolesResponse.ok) return NextResponse.json({error:"Não foi possível validar suas permissões."},{status:502});
+    const roles = await rolesResponse.json();
+    const roleIds = new Set<string>(memberData.roles || []);
+    const canPublish = roles.some((role:any) => roleIds.has(role.id) && (
+      (BigInt(role.permissions || "0") & 8n) !== 0n ||
+      (BigInt(role.permissions || "0") & 32n) !== 0n ||
+      (BigInt(role.permissions || "0") & 8192n) !== 0n
+    ));
+    if (!canPublish) return NextResponse.json({error:"Sua conta não possui permissão para publicar no Discord."},{status:403});
+
+    const session = signPublisherSession({
+      userId: u.id,
+      username: u.username,
+      exp: Date.now() + 1000 * 60 * 60 * 8
+    });
+    const response = NextResponse.redirect(new URL("/publicador", req.url));
+    response.cookies.set(PUBLISHER_COOKIE, session, {
+      httpOnly: true,
+      secure: true,
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 60 * 8
+    });
+    return response;
+  }
 
   const addRole=async(roleId:string)=>{
     const response=await fetch(
