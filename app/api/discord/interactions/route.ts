@@ -1506,20 +1506,26 @@ export async function POST(req: NextRequest) {
             type: 1,
             components: [
               button("space_copy_pix:" + order.id, "COPIAR PIX", "📋", 1),
-              button("space_qr_pix:" + order.id, "GERAR QR CODE", "📲", 2)
+              button("space_qr_pix:" + order.id, "VER QR CODE", "📲", 2)
             ]
           }],
           [{
-            title: "🟡 PAGAMENTO • PEDIDO #" + order.order_number,
-            description: "Pague via PIX. O pagamento será confirmado automaticamente pelo Asaas.",
-            color: 0xfee75c,
+            title: "💳 PIX • PEDIDO #" + order.order_number,
+            description:
+              "**Seu PIX está pronto.**\n" +
+              "Faça o pagamento usando o código copia e cola ou o QR Code abaixo.\n\n" +
+              "🟢 **Confirmação automática**\n" +
+              "Assim que o Asaas confirmar o pagamento, o pedido será atualizado automaticamente.\n\n" +
+              "━━━━━━━━━━━━━━━━━━━━",
+            color: 0x8b5cf6,
             fields: [
-              { name: "💵 Valor", value: "**" + money(Number(order.total_price)) + "**", inline: true },
-              { name: "🪙 Robux", value: "**" + Number(order.robux_amount).toLocaleString("pt-BR") + "**", inline: true },
-              { name: "📲 Pagamento", value: "**PIX disponível abaixo**\nUse **COPIAR PIX** ou **GERAR QR CODE**.", inline: false },
-              { name: "⏳ Expira em", value: "**" + expiration + "**", inline: false }
+              { name: "🪙 Robux", value: "**" + Number(order.robux_amount).toLocaleString("pt-BR") + " Robux**", inline: true },
+              { name: "💵 Total", value: "**" + money(Number(order.total_price)) + "**", inline: true },
+              { name: "⏳ Expiração", value: "**" + expiration + "**", inline: true },
+              { name: "📲 Como pagar", value: "Escolha **COPIAR PIX** para copiar o código ou **VER QR CODE** para abrir o QR Code.", inline: false },
+              { name: "🔒 Segurança", value: "Nunca envie seu código PIX ou comprovante em canais públicos.", inline: false }
             ],
-            footer: { text: "🟡 Aberto • Aguardando pagamento" }
+            footer: { text: "SPACE Rewards • Aguardando pagamento" }
           }]
         )
       );
