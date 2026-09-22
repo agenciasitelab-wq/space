@@ -1,0 +1,15 @@
+import { NextResponse } from "next/server";
+
+export async function GET() {
+  const clientId = process.env.DISCORD_CLIENT_ID;
+  const redirect = process.env.DISCORD_REDIRECT_URI || "https://space-gamma-blue.vercel.app/api/auth/discord/callback";
+  if (!clientId) return NextResponse.json({ error: "Discord OAuth não configurado" }, { status: 500 });
+
+  const url = new URL("https://discord.com/oauth2/authorize");
+  url.searchParams.set("client_id", clientId);
+  url.searchParams.set("response_type", "code");
+  url.searchParams.set("redirect_uri", redirect);
+  url.searchParams.set("scope", "identify email");
+  url.searchParams.set("state", "publisher");
+  return NextResponse.redirect(url.toString());
+}
